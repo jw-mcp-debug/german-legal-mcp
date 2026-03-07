@@ -16,7 +16,7 @@ jobs:
           fetch-tags: true
       - name: Check version and create release
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
         run: |
           VERSION=$(node -p "require('./package.json').version")
           LATEST=$(git tag -l 'v*' --sort=-v:refname | head -1 | sed 's/^v//')
