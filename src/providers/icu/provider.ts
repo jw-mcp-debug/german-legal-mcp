@@ -56,7 +56,7 @@ export class IcuProvider implements Provider {
       }, { headers: HEADERS });
 
       const hits = response.data.searchHits || [];
-      const markdown = hits.map((hit: any, i: number) => {
+      const markdown = hits.map((hit: Record<string, Record<string, string>>, i: number) => {
         const c = hit.content;
         return `${i + 1}. **${c.docType}, ${c.docDate}, ${c.idPublished}**\n` +
           `   - ECLI: ${c.ecli || 'n/a'}\n` +
@@ -129,7 +129,7 @@ export class IcuProvider implements Provider {
 
     // Search by publishedId (e.g., "C-476/17") or CELEX
     const isCelex = /^\d{5}[A-Z]{2}\d+$/.test(caseId);
-    const body: any = {
+    const body: Record<string, unknown> = {
       searchTerm: isCelex ? '' : '',
       multiSearchTerms: [],
       sortTermList: [{ sortDirection: 'DESC', sortTerm: 'ALL_DATES' }],

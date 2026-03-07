@@ -69,7 +69,7 @@ SELECT DISTINCT ?celex ?title WHERE {
       });
 
       const bindings = response.data.results?.bindings || [];
-      const markdown = bindings.map((b: any, i: number) =>
+      const markdown = bindings.map((b: Record<string, { value: string }>, i: number) =>
         `${i + 1}. **${b.celex.value}**\n   ${b.title.value.slice(0, 200)}${b.title.value.length > 200 ? '…' : ''}`
       ).join('\n\n');
 

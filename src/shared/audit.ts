@@ -63,7 +63,8 @@ class AuditLogger {
       await appendFile(this.logPath, JSON.stringify(auditEvent) + '\n');
     } catch (error) {
       // Don't throw - audit logging should not break the application
-      console.error('[Audit] Failed to write audit log:', error);
+      // Use stderr directly since Logger might cause circular issues
+      process.stderr.write(`[Audit] Failed to write audit log: ${error}\n`);
     }
   }
 
