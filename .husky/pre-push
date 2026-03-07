@@ -1,0 +1,27 @@
+#!/bin/sh
+
+# Only check on pushes to main
+branch=$(git rev-parse --abbrev-ref HEAD)
+if [ "$branch" != "main" ]; then
+  exit 0
+fi
+
+LOCAL_VERSION=$(node -p "require('./package.json').version")
+LATEST_TAG=$(git tag -l 'v*' --sort=-v:refname | head -1 | sed 's/^v//')
+
+if [ -z "$LATEST_TAG" ]; then
+  exit 0
+fi
+
+# Compare versions using node semver
+HIGHER=$(node -e "
+const [a,b] = ['$LOCAL_VERSION','$LATEST_TAG'].map(v => v.split('-')[0].split('.').map(Number));
+const cmp = a[0]-b[0] || a[1]-b[1] || a[2]-b[2];
+process.exit(cmp > 0 ? 0 : 1);
+" 2>/dev/null && echo "yes" || echo "no")
+
+if [ "$HIGHER" = "no" ]; then
+  echo "❌ Version $LOCAL_VERSION is not higher than latest tag v$LATEST_TAG"
+  echo "   Run: npm version <major|minor|patch> --no-git-tag-version"
+  exit 1
+fi
