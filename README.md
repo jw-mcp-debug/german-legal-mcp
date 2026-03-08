@@ -14,20 +14,22 @@ A Model Context Protocol (MCP) server for German legal research, providing unifi
 
 | Source | Status | Prefix | Authentication |
 |--------|--------|--------|----------------|
-| [Gesetze im Internet](https://www.gesetze-im-internet.de) | ✅ Available | `gii:` | None (public) |
+| Bundes- & Landesrecht | ✅ Available | `legis:` | None (public) |
 | [Rechtsprechung im Internet](https://www.rechtsprechung-im-internet.de) | ✅ Available | `rii:` | None (public) |
 | [InfoCuria (CJEU)](https://infocuria.curia.europa.eu) | ✅ Available | `icu:` | None (public) |
 | [EUR-Lex](https://eur-lex.europa.eu) | ✅ Available | `eul:` | None (public) |
 
 ## Features
 
-### Gesetze im Internet (`gii:*` tools)
-- **All federal German laws** — BGB, StGB, GG, and thousands more
+### Bundes- & Landesrecht (`legis:*` tools)
+- **Federal and state legislation** — BUND (all federal laws) + 16 Länder (all states)
 - **No authentication** — free public access, no rate limits
-- **Resilient input** — accepts "§ 823", "823", "Art. 1", "Paragraph 51"
+- **Unified interface** — one set of tools for all jurisdictions
+- **Full text search** — search across state legislation (Länder only)
+- **Resilient input** — BUND accepts "§ 823", "823", "Art. 1", "Paragraph 51"
 - **Pandoc-compatible Markdown** — clean conversion with Turndown
 - **Save to file** — `save_path` parameter to avoid context pollution
-- Direct legislation lookup by law abbreviation and section number
+- **Available states:** BUND, BB, BW, BY, BE, HB, HE, HH, MV, NI, NW, RP, SL, SN, ST, SH, TH
 
 ### Rechtsprechung im Internet (`rii:*` tools)
 - **Federal court decisions** — BVerfG, BGH, BVerwG, BFH, BAG, BSG, BPatG (from 2010)
@@ -80,7 +82,7 @@ or add your MCP client config (e.g., `claude_desktop_config.json`):
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `GLMCP_GII_ENABLED` | `true` | Gesetze im Internet |
+| `GLMCP_LEGIS_ENABLED` | `true` | Bundes- & Landesrecht |
 | `GLMCP_RII_ENABLED` | `true` | Rechtsprechung im Internet |
 | `GLMCP_ICU_ENABLED` | `true` | InfoCuria (CJEU) |
 | `GLMCP_EUL_ENABLED` | `true` | EUR-Lex |
@@ -88,11 +90,14 @@ or add your MCP client config (e.g., `claude_desktop_config.json`):
 
 ## Tools
 
-### Gesetze im Internet
+### Bundes- & Landesrecht
 
 | Tool | Description |
 |------|-------------|
-| `gii:get_legislation` | Retrieve a federal law section (e.g., BGB § 823). Accepts flexible input: "823", "§ 823", "Art. 1". Optional `save_path` to save to file. |
+| `legis:search` | Search federal and state legislation. Parameter: `query`, `state` (e.g., "BW", "BE"), `limit`. Note: BUND does not support search. |
+| `legis:get` | Retrieve a specific law/norm. BUND: `id` = "law/section" (e.g., "bgb/823"). Länder: `id` from search results. Optional `save_path`. |
+| `legis:toc` | Compact table of contents for a law — section numbers and headings. Supports `from`/`to` range and `depth` filter. BUND: `id` = law abbreviation (e.g., "bgb"). |
+| `legis:states` | List available jurisdictions with implementation status. |
 
 ### Rechtsprechung im Internet
 
@@ -152,15 +157,15 @@ This repo uses [Conventional Commits](https://www.conventionalcommits.org/) enfo
 
 **Types:** `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `chore`, `ci`, `build`, `revert`
 
-**Scopes:** `gii`, `rii`, `icu`, `eul`, `core`, `deps`, `config`
+**Scopes:** `legis`, `rii`, `icu`, `eul`, `core`, `deps`, `config`
 
 ## Architecture
 
 - **Dynamic provider loading** — providers auto-discovered from `src/providers/*/`
 - **Cheerio + Turndown** for HTML → pandoc Markdown conversion
 - **Zod** for input validation
-- **Axios** for HTTP requests (GII, RII, InfoCuria, EUR-Lex)
-- Tools namespaced by source (`gii:`, `rii:`, `icu:`, `eul:`)
+- **Axios** for HTTP requests (Legis, RII, InfoCuria, EUR-Lex)
+- Tools namespaced by source (`legis:`, `rii:`, `icu:`, `eul:`)
 
 ## License
 

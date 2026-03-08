@@ -1,0 +1,64 @@
+import axios from 'axios';
+import * as cheerio from 'cheerio';
+import TurndownService from 'turndown';
+import { rootLogger } from '../../../shared/logger.js';
+import type { LegisAdapter, SearchResult, LegisEntry } from '../types.js';
+
+const logger = rootLogger.child({ module: 'ni-adapter' });
+const BASE = 'https://voris.wolterskluwer-online.de';
+const turndown = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced' });
+
+export class NiedersachsenAdapter implements LegisAdapter {
+  readonly states = ['NI'] as const;
+
+  async search(_state: string, query: string, limit: number): Promise<SearchResult[]> {
+    logger.info('Searching NI-VORIS', { query });
+    const { data } = await axios.get(`${BASE}/search`, {
+      params: { query },
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; German-Legal-MCP/1.0)' },
+    });
+
+    const $ = cheerio.load(data);
+    const results: SearchResult[] = [];
+
+    $('h3 > a[href^="/browse/document/"]').each((_, el) => {
+      if (results.length >= limit) return false;
+      const href = $(el).attr('href') || '';
+      const id = href.split('/').pop() || '';
+      results.push({
+        id,
+        title: $(el).text().trim(),
+        subtitle: $(el).closest('.egal-search-result-item-title')
+          .next('.egal-search-result-item-snippet').text().trim(),
+        date: '',
+      });
+    });
+
+    return results;
+  }
+
+  async get(_state: string, id: string): Promise<LegisEntry> {
+    logger.info('Fetching NI-VORIS document', { id });
+    const url = `${BASE}/browse/document/${id}`;
+    const { data } = await axios.get(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; German-Legal-MCP/1.0)' },
+    });
+
+    const $ = cheerio.load(data);
+    const title = $('title').text().replace(/\s*\|.*$/, '').trim();
+
+    // Strip TOC and navigation, keep footnotes (contain editorial notes)
+    const body = $('.wkde-document-body');
+    body.find('.law-toc, nav, [role="navigation"]').remove();
+    // Strip internal cite links — keep text only
+    body.find('a.internal-cite').each((_, el) => {
+      $(el).replaceWith($(el).text());
+    });
+    // Strip sentence number superscripts (e.g. <sup class="satz">1</sup>)
+    body.find('sup.satz').remove();
+
+    const content = turndown.turndown(body.html() || '');
+
+    return { title, content, url };
+  }
+}

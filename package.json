@@ -1,6 +1,6 @@
 {
   "name": "@metaneutrons/german-legal-mcp",
-  "version": "0.6.1",
+  "version": "0.8.0",
   "description": "MCP server for German legal research",
   "main": "dist/index.js",
   "bin": {
