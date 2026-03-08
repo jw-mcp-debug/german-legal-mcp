@@ -8,7 +8,7 @@ export const riiTools: ToolDefinition[] = [
       'Search for court decisions in Rechtsprechung im Internet (federal German courts: BVerfG, BGH, BVerwG, BFH, BAG, BSG, BPatG). ' +
       'Returns list of decisions with metadata and doc IDs for retrieval.',
     inputSchema: z.object({
-      query: z.string().describe('Search query (e.g., "Metall auf Metall", "Datenschutz", "BGB § 823")'),
+      query: z.string().describe('Search query. For file numbers (Aktenzeichen): use ONLY the file number without keywords (e.g., "I ZR 115/16"). For topics: keywords (e.g., "Metall auf Metall", "BGB § 823").'),
       limit: z.number().optional().default(10).describe('Maximum number of results (default: 10)'),
     }),
   },
