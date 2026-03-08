@@ -2,7 +2,7 @@ import axios from 'axios';
 import * as cheerio from 'cheerio';
 import TurndownService from 'turndown';
 import { rootLogger } from '../../../shared/logger.js';
-import type { LegisAdapter, SearchResult, LegisEntry } from '../types.js';
+import type { LegisAdapter, SearchResult, LegisEntry, TocEntry } from '../types.js';
 
 const logger = rootLogger.child({ module: 'ni-adapter' });
 const BASE = 'https://voris.wolterskluwer-online.de';
@@ -60,5 +60,28 @@ export class NiedersachsenAdapter implements LegisAdapter {
     const content = turndown.turndown(body.html() || '');
 
     return { title, content, url };
+  }
+
+  async toc(_state: string, id: string): Promise<TocEntry[]> {
+    const { data } = await axios.get(`${BASE}/browse/document/${id}`, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; German-Legal-MCP/1.0)' },
+    });
+    const $ = cheerio.load(data);
+    const entries: TocEntry[] = [];
+
+    $('.wk-tree-node-label[data-level]').each((_, el) => {
+      const text = $(el).text().replace(/\s+/g, ' ').trim();
+      if (!text || text.includes('anzeigen') || text.includes('vergleichen') || text.includes('herunterladen') || text.includes('drucken') || text.includes('hervorheben') || text.includes('Vollbild')) return;
+      const level = parseInt($(el).attr('data-level') || '0', 10);
+      // Parse "§§ 1 - 3, Erster Teil - Aufgaben..." or "Anlage NPOG"
+      const m = text.match(/^(§§?\s*[\d\s\-a-z]+),\s*(.*)/i);
+      entries.push({
+        depth: level,
+        num: m?.[1]?.trim() || '',
+        title: m?.[2]?.trim() || text,
+      });
+    });
+
+    return entries;
   }
 }
