@@ -19,6 +19,7 @@ A Model Context Protocol (MCP) server for German legal research, providing unifi
 | [InfoCuria (CJEU)](https://infocuria.curia.europa.eu) | ✅ Available | `icu:` | None (public) |
 | [EUR-Lex](https://eur-lex.europa.eu) | ✅ Available | `eul:` | None (public) |
 | [DIP Bundestag](https://dip.bundestag.de) | ✅ Available | `dip:` | Public key included |
+| [arXiv](https://arxiv.org) | ✅ Available | `arxiv:` | None (public) |
 
 ## Features
 
@@ -66,6 +67,14 @@ A Model Context Protocol (MCP) server for German legal research, providing unifi
 - **Public API key included** — works out of the box (key expires 2026-06-01, override via env var)
 - **Save to file** — `save_path` parameter to avoid context pollution
 
+### arXiv (`arxiv:*` tools)
+- **Preprint search** — search by keywords, author, title, abstract, or category
+- **Metadata + abstract** — default response without full text fetch (token-efficient)
+- **HTML full text** — Markdown conversion for papers from ~2024+ (LaTeXML HTML)
+- **PDF fallback** — older papers without HTML return abstract + PDF link
+- **No authentication** — free public API, no rate limits beyond ~1 req/3s
+- **Save to file** — `save_path` parameter to avoid context pollution
+
 ## Quick Start with npx
 
 ```bash
@@ -97,6 +106,7 @@ or add your MCP client config (e.g., `claude_desktop_config.json`):
 | `GLMCP_EUL_ENABLED` | `true` | EUR-Lex |
 | `GLMCP_DIP_ENABLED` | `true` | DIP Bundestag (auto-disabled after 2026-06-01 without own key) |
 | `GLMCP_DIP_API_KEY` | Public key | Override the bundled public API key |
+| `GLMCP_ARXIV_ENABLED` | `true` | arXiv preprint search |
 
 
 ## Tools
@@ -139,6 +149,13 @@ or add your MCP client config (e.g., `claude_desktop_config.json`):
 | `dip:get` | Retrieve full text of a Drucksache by Dokumentnummer (e.g., "19/27426"). Supports `section` and `save_path`. |
 | `dip:search_vorgang` | Search legislative processes (Vorgänge) with status and linked Drucksachen. |
 | `dip:search_plenarprotokoll` | Full text search across parliamentary debate transcripts (BT and BR). |
+
+### arXiv
+
+| Tool | Description |
+|------|-------------|
+| `arxiv:search` | Search preprints by keywords, author, title, abstract, or category. Returns metadata + abstract. |
+| `arxiv:get` | Retrieve paper by arXiv ID. Default: metadata + abstract. With `section` or `save_path`: HTML full text as Markdown (~2024+, older: PDF link). |
 
 ### Two-Phase Document Retrieval
 
@@ -184,8 +201,8 @@ This repo uses [Conventional Commits](https://www.conventionalcommits.org/) enfo
 - **Dynamic provider loading** — providers auto-discovered from `src/providers/*/`
 - **Cheerio + Turndown** for HTML → pandoc Markdown conversion
 - **Zod** for input validation
-- **Axios** for HTTP requests (Legis, RII, InfoCuria, EUR-Lex, DIP)
-- Tools namespaced by source (`legis:`, `rii:`, `icu:`, `eul:`, `dip:`)
+- **Axios** for HTTP requests (Legis, RII, InfoCuria, EUR-Lex, DIP, arXiv)
+- Tools namespaced by source (`legis:`, `rii:`, `icu:`, `eul:`, `dip:`, `arxiv:`)
 
 ## License
 

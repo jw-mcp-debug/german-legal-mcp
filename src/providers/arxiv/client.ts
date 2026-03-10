@@ -1,0 +1,63 @@
+import axios from 'axios';
+import { load } from 'cheerio';
+import { arxivConfig } from './config.js';
+
+export interface ArxivEntry {
+  id: string;
+  title: string;
+  summary: string;
+  authors: string[];
+  published: string;
+  updated: string;
+  categories: string[];
+  primaryCategory: string;
+  doi?: string;
+  journalRef?: string;
+  comment?: string;
+  pdfUrl: string;
+  htmlUrl: string;
+}
+
+export class ArxivClient {
+  async search(params: Record<string, string | number>): Promise<{ total: number; entries: ArxivEntry[] }> {
+    const { data } = await axios.get(arxivConfig.apiUrl, { params, timeout: 30000 });
+    return this.parseAtom(data);
+  }
+
+  async getHtml(arxivId: string): Promise<string | null> {
+    try {
+      const { data } = await axios.get(`${arxivConfig.htmlUrl}/${arxivId}`, { timeout: 30000 });
+      return data;
+    } catch {
+      return null;
+    }
+  }
+
+  private parseAtom(xml: string): { total: number; entries: ArxivEntry[] } {
+    const $ = load(xml, { xml: true });
+    const total = Number($('opensearch\\:totalResults').text()) || 0;
+    const entries: ArxivEntry[] = [];
+
+    $('entry').each((_, el) => {
+      const $e = $(el);
+      const rawId = $e.find('id').text().replace('http://arxiv.org/abs/', '');
+      entries.push({
+        id: rawId,
+        title: $e.find('title').text().replace(/\s+/g, ' ').trim(),
+        summary: $e.find('summary').text().trim(),
+        authors: $e.find('author name').map((__, n) => $(n).text()).get(),
+        published: $e.find('published').text().slice(0, 10),
+        updated: $e.find('updated').text().slice(0, 10),
+        categories: $e.find('category').map((__, c) => $(c).attr('term') || '').get(),
+        primaryCategory: $e.find('arxiv\\:primary_category').attr('term') || '',
+        doi: $e.find('arxiv\\:doi').text() || undefined,
+        journalRef: $e.find('arxiv\\:journal_ref').text() || undefined,
+        comment: $e.find('arxiv\\:comment').text() || undefined,
+        pdfUrl: `https://arxiv.org/pdf/${rawId}`,
+        htmlUrl: `https://arxiv.org/html/${rawId}`,
+      });
+    });
+
+    return { total, entries };
+  }
+}

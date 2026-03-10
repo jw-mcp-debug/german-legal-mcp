@@ -1,0 +1,22 @@
+import type { Provider, ToolDefinition, ToolResult } from '../../shared/types.js';
+import { ArxivClient } from './client.js';
+import { arxivTools } from './tools/index.js';
+import { handleSearch } from './tools/search.js';
+import { handleGet } from './tools/get.js';
+
+export class ArxivProvider implements Provider {
+  readonly name = 'arxiv';
+  private client = new ArxivClient();
+
+  getTools(): ToolDefinition[] { return arxivTools; }
+
+  async handleToolCall(name: string, args: Record<string, unknown>): Promise<ToolResult> {
+    switch (name) {
+      case 'arxiv:search': return handleSearch(this.client, args);
+      case 'arxiv:get': return handleGet(this.client, args);
+      default: return { content: [{ type: 'text', text: `Unknown tool: ${name}` }], isError: true };
+    }
+  }
+
+  async shutdown(): Promise<void> {}
+}
