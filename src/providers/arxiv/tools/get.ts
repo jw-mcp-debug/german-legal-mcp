@@ -3,27 +3,7 @@ import { dirname } from 'path';
 import type { ArxivClient } from '../client.js';
 import type { ToolResult } from '../../../shared/types.js';
 import { htmlToMarkdown } from '../converter.js';
-
-function extractSection(text: string, section: string): string {
-  const lineMatch = section.match(/^lines?:(\d+)-(\d+)$/i);
-  if (lineMatch) {
-    const lines = text.split('\n');
-    return lines.slice(Number(lineMatch[1]) - 1, Number(lineMatch[2])).join('\n');
-  }
-  const lines = text.split('\n');
-  const needle = section.toLowerCase();
-  const startIdx = lines.findIndex(l => l.toLowerCase().includes(needle));
-  if (startIdx === -1) return `Section "${section}" not found.`;
-  // Find next heading of same or higher level
-  const headingMatch = lines[startIdx].match(/^(#{1,6})\s/);
-  const level = headingMatch ? headingMatch[1].length : 99;
-  let endIdx = lines.length;
-  for (let i = startIdx + 1; i < lines.length; i++) {
-    const m = lines[i].match(/^(#{1,6})\s/);
-    if (m && m[1].length <= level) { endIdx = i; break; }
-  }
-  return lines.slice(startIdx, endIdx).join('\n');
-}
+import { extractSection } from '../../../shared/extract-section.js';
 
 export async function handleGet(client: ArxivClient, args: Record<string, unknown>): Promise<ToolResult> {
   const { id, section, save_path } = args as { id: string; section?: string; save_path?: string };

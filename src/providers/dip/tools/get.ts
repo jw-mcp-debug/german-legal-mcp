@@ -2,28 +2,7 @@ import { writeFileSync, mkdirSync } from 'fs';
 import { dirname } from 'path';
 import type { DipClient } from '../client.js';
 import type { ToolResult } from '../../../shared/types.js';
-
-function extractSection(text: string, section: string): string {
-  // Line range: "lines:100-200"
-  const lineMatch = section.match(/^lines?:(\d+)-(\d+)$/i);
-  if (lineMatch) {
-    const lines = text.split('\n');
-    return lines.slice(Number(lineMatch[1]) - 1, Number(lineMatch[2])).join('\n');
-  }
-  // Heading match: find section by heading text
-  const lines = text.split('\n');
-  const startIdx = lines.findIndex(l => l.toLowerCase().includes(section.toLowerCase()));
-  if (startIdx === -1) return `Section "${section}" not found.`;
-  // Find next heading-like line (starts with "Zu " or is all-caps or blank-line separated block)
-  let endIdx = lines.length;
-  for (let i = startIdx + 1; i < lines.length; i++) {
-    if (i > startIdx + 1 && /^Zu\s+(§|Artikel|Art\.|Nummer|Absatz|Teil|Abschnitt)\s/i.test(lines[i])) {
-      endIdx = i;
-      break;
-    }
-  }
-  return lines.slice(startIdx, endIdx).join('\n');
-}
+import { extractSection } from '../../../shared/extract-section.js';
 
 export async function handleGet(client: DipClient, args: Record<string, unknown>): Promise<ToolResult> {
   const { dokumentnummer, section, save_path } = args as {
