@@ -18,6 +18,7 @@ A Model Context Protocol (MCP) server for German legal research, providing unifi
 | [Rechtsprechung im Internet](https://www.rechtsprechung-im-internet.de) | ✅ Available | `rii:` | None (public) |
 | [InfoCuria (CJEU)](https://infocuria.curia.europa.eu) | ✅ Available | `icu:` | None (public) |
 | [EUR-Lex](https://eur-lex.europa.eu) | ✅ Available | `eul:` | None (public) |
+| [DIP Bundestag](https://dip.bundestag.de) | ✅ Available | `dip:` | Public key included |
 
 ## Features
 
@@ -57,6 +58,14 @@ A Model Context Protocol (MCP) server for German legal research, providing unifi
 - **Partial content** — `section` parameter for articles (Art. 5), headings, or line ranges
 - **Save to file** — `save_path` parameter to avoid context pollution
 
+### DIP Bundestag (`dip:*` tools)
+- **Parliamentary documents** — Bundestagsdrucksachen (Gesetzentwürfe, Beschlussempfehlungen, Anfragen)
+- **Legislative processes** — Vorgänge with status tracking and linked documents
+- **Debate transcripts** — full text search across Plenarprotokolle (BT and BR)
+- **Full text retrieval** — extracted text including Gesetzesbegründungen, with section support
+- **Public API key included** — works out of the box (key expires 2026-06-01, override via env var)
+- **Save to file** — `save_path` parameter to avoid context pollution
+
 ## Quick Start with npx
 
 ```bash
@@ -86,6 +95,8 @@ or add your MCP client config (e.g., `claude_desktop_config.json`):
 | `GLMCP_RII_ENABLED` | `true` | Rechtsprechung im Internet |
 | `GLMCP_ICU_ENABLED` | `true` | InfoCuria (CJEU) |
 | `GLMCP_EUL_ENABLED` | `true` | EUR-Lex |
+| `GLMCP_DIP_ENABLED` | `true` | DIP Bundestag (auto-disabled after 2026-06-01 without own key) |
+| `GLMCP_DIP_API_KEY` | Public key | Override the bundled public API key |
 
 
 ## Tools
@@ -119,6 +130,15 @@ or add your MCP client config (e.g., `claude_desktop_config.json`):
 |------|-------------|
 | `eul:search` | Search EU legislation via SPARQL. Filter by type (directive, regulation, decision, treaty). |
 | `eul:get_document` | Retrieve EU legislation by CELEX number (e.g., "32016R0679" for GDPR). Supports `section` (Art. 5, Artikel 5-10, headings, line ranges) and `save_path`. |
+
+### DIP Bundestag
+
+| Tool | Description |
+|------|-------------|
+| `dip:search` | Search Bundestagsdrucksachen by title. Filter by type (Gesetzentwurf, Anfrage, etc.), Wahlperiode, date range. |
+| `dip:get` | Retrieve full text of a Drucksache by Dokumentnummer (e.g., "19/27426"). Supports `section` and `save_path`. |
+| `dip:search_vorgang` | Search legislative processes (Vorgänge) with status and linked Drucksachen. |
+| `dip:search_plenarprotokoll` | Full text search across parliamentary debate transcripts (BT and BR). |
 
 ### Two-Phase Document Retrieval
 
@@ -157,15 +177,15 @@ This repo uses [Conventional Commits](https://www.conventionalcommits.org/) enfo
 
 **Types:** `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `chore`, `ci`, `build`, `revert`
 
-**Scopes:** `legis`, `rii`, `icu`, `eul`, `core`, `deps`, `config`
+**Scopes:** `legis`, `rii`, `icu`, `eul`, `dip`, `core`, `deps`, `config`
 
 ## Architecture
 
 - **Dynamic provider loading** — providers auto-discovered from `src/providers/*/`
 - **Cheerio + Turndown** for HTML → pandoc Markdown conversion
 - **Zod** for input validation
-- **Axios** for HTTP requests (Legis, RII, InfoCuria, EUR-Lex)
-- Tools namespaced by source (`legis:`, `rii:`, `icu:`, `eul:`)
+- **Axios** for HTTP requests (Legis, RII, InfoCuria, EUR-Lex, DIP)
+- Tools namespaced by source (`legis:`, `rii:`, `icu:`, `eul:`, `dip:`)
 
 ## License
 
