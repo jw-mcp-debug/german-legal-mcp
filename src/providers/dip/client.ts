@@ -1,5 +1,18 @@
-import axios, { type AxiosInstance } from 'axios';
+import axios, { type AxiosInstance, type AxiosResponse } from 'axios';
 import { dipConfig } from './config.js';
+
+class DipRateLimitError extends Error {
+  constructor() {
+    super('DIP API rate limit exceeded (Enodia challenge). Wait a few minutes and try again.');
+    this.name = 'DipRateLimitError';
+  }
+}
+
+function checkRateLimit(res: AxiosResponse): void {
+  if (typeof res.data === 'string' && res.data.includes('Enodia')) {
+    throw new DipRateLimitError();
+  }
+}
 
 export interface DipSearchResult {
   numFound: number;
@@ -43,6 +56,7 @@ export class DipClient {
       params: { apikey: dipConfig.apiKey },
       timeout: 30000,
     });
+    this.http.interceptors.response.use(res => { checkRateLimit(res); return res; });
   }
 
   async searchDrucksachen(params: Record<string, string | number>): Promise<DipSearchResult> {
