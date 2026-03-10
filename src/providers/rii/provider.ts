@@ -4,6 +4,7 @@ import { Provider, ToolDefinition, ToolResult } from '../../shared/types.js';
 import { rootLogger } from '../../shared/logger.js';
 import { RiiConverter } from './converter.js';
 import { riiTools } from './tools/index.js';
+import { handleBayernSearch, handleBayernGetDecision } from './bayern/handler.js';
 
 const logger = rootLogger.child({ module: 'rii-provider' });
 
@@ -22,13 +23,16 @@ export class RiiProvider implements Provider {
   }
 
   async handleToolCall(toolName: string, args: Record<string, unknown>): Promise<ToolResult> {
-    if (toolName === 'rii:search') return this.handleSearch(args);
-    if (toolName === 'rii:get_decision') return this.handleGetDecision(args);
+    const source = (args.source as string) || 'BUND';
 
-    return {
-      content: [{ type: 'text', text: `Unknown tool: ${toolName}` }],
-      isError: true,
-    };
+    if (toolName === 'rii:search') {
+      return source === 'BY' ? handleBayernSearch(args) : this.handleSearch(args);
+    }
+    if (toolName === 'rii:get_decision') {
+      return source === 'BY' ? handleBayernGetDecision(args) : this.handleGetDecision(args);
+    }
+
+    return { content: [{ type: 'text', text: `Unknown tool: ${toolName}` }], isError: true };
   }
 
   async shutdown(): Promise<void> {
@@ -51,9 +55,7 @@ export class RiiProvider implements Provider {
           desc: 'text',
           query,
         },
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (compatible; German-Legal-MCP/1.0)',
-        },
+        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; German-Legal-MCP/1.0)' },
       });
 
       const $ = cheerio.load(response.data);
@@ -63,41 +65,21 @@ export class RiiProvider implements Provider {
         const href = $(el).attr('href') || '';
         const docIdMatch = href.match(/doc\.id=([^&]+)/);
         const title = $(el).attr('title') || $(el).text().trim();
-        
-        // Only take main links (not Kurztext/Langtext sub-links)
         if (docIdMatch && !$(el).attr('id')?.includes('.')) {
           const snippet = $(el).closest('tr').find('.docPreview').text().trim();
-          results.push({
-            title,
-            docId: docIdMatch[1],
-            snippet,
-          });
+          results.push({ title, docId: docIdMatch[1], snippet });
         }
       });
 
       const limitedResults = results.slice(0, limit);
-
       const markdown = limitedResults
-        .map(
-          (r, i) =>
-            `${i + 1}. **${r.title}**\n   - Doc ID: \`${r.docId}\`${r.snippet ? `\n   - ${r.snippet}` : ''}`
-        )
+        .map((r, i) => `${i + 1}. **${r.title}**\n   - Doc ID: \`${r.docId}\`${r.snippet ? `\n   - ${r.snippet}` : ''}`)
         .join('\n\n');
 
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Found ${results.length} results (showing ${limitedResults.length}):\n\n${markdown}`,
-          },
-        ],
-      };
+      return { content: [{ type: 'text', text: `Found ${results.length} results (showing ${limitedResults.length}):\n\n${markdown}` }] };
     } catch (error) {
       logger.error('Search failed', error as Error, { query });
-      return {
-        content: [{ type: 'text', text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
-        isError: true,
-      };
+      return { content: [{ type: 'text', text: `Error: ${error instanceof Error ? error.message : String(error)}` }], isError: true };
     }
   }
 
@@ -108,48 +90,23 @@ export class RiiProvider implements Provider {
       logger.info('Fetching decision', { doc_id, part });
 
       const response = await axios.get(BASE_URL, {
-        params: {
-          'doc.id': doc_id,
-          'doc.part': part,
-          showdoccase: '1',
-          paramfromHL: 'true',
-        },
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (compatible; German-Legal-MCP/1.0)',
-        },
+        params: { 'doc.id': doc_id, 'doc.part': part, showdoccase: '1', paramfromHL: 'true' },
+        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; German-Legal-MCP/1.0)' },
       });
 
       const decision = this.converter.extractDecision(response.data);
-
-      const markdown = `# ${decision.title}
-
-**Court:** ${decision.court}  
-**Date:** ${decision.date}  
-**File Number:** ${decision.fileNumber}  
-**ECLI:** ${decision.ecli}
-
----
-
-${decision.content}`;
+      const markdown = `# ${decision.title}\n\n**Court:** ${decision.court}  \n**Date:** ${decision.date}  \n**File Number:** ${decision.fileNumber}  \n**ECLI:** ${decision.ecli}\n\n---\n\n${decision.content}`;
 
       if (save_path) {
         const { writeFile } = await import('fs/promises');
         await writeFile(save_path, markdown, 'utf-8');
-        return {
-          content: [{ type: 'text', text: `Saved to ${save_path}\n\nCourt: ${decision.court}\nDate: ${decision.date}\nFile Number: ${decision.fileNumber}\nECLI: ${decision.ecli}` }],
-        };
+        return { content: [{ type: 'text', text: `Saved to ${save_path}\n\nCourt: ${decision.court}\nDate: ${decision.date}\nFile Number: ${decision.fileNumber}\nECLI: ${decision.ecli}` }] };
       }
 
-      return {
-        content: [{ type: 'text', text: markdown }],
-      };
+      return { content: [{ type: 'text', text: markdown }] };
     } catch (error) {
       logger.error('Failed to get decision', error as Error, { doc_id });
-      return {
-        content: [{ type: 'text', text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
-        isError: true,
-      };
+      return { content: [{ type: 'text', text: `Error: ${error instanceof Error ? error.message : String(error)}` }], isError: true };
     }
   }
 }
-

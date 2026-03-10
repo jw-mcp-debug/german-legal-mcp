@@ -35,6 +35,7 @@ A Model Context Protocol (MCP) server for German legal research, providing unifi
 
 ### Rechtsprechung im Internet (`rii:*` tools)
 - **Federal court decisions** — BVerfG, BGH, BVerwG, BFH, BAG, BSG, BPatG (from 2010)
+- **Bavarian state courts** — AG, LG, OLG, VG, VGH, FG, ArbG, LAG, BayVerfGH via gesetze-bayern.de
 - **No authentication** — free public access
 - **Full text search** — search across all federal court decisions
 - **Kurztext/Langtext** — summary or full text via `part` parameter
@@ -124,8 +125,8 @@ or add your MCP client config (e.g., `claude_desktop_config.json`):
 
 | Tool | Description |
 |------|-------------|
-| `rii:search` | Search for court decisions. Returns list with doc IDs, titles, and snippets. |
-| `rii:get_decision` | Retrieve full text of a court decision by doc ID. `part`: K (Kurztext) or L (Langtext, default). Optional `save_path` to save to file. |
+| `rii:search` | Search for court decisions. Returns list with doc IDs, titles, and snippets. Use `source: "BY"` for Bavarian state courts. |
+| `rii:get_decision` | Retrieve full text of a court decision by doc ID. `part`: K (Kurztext) or L (Langtext, default). Optional `save_path` to save to file. Use `source: "BY"` for gesetze-bayern.de IDs. |
 
 ### InfoCuria — CJEU
 
