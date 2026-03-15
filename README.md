@@ -210,3 +210,4 @@ This repo uses [Conventional Commits](https://www.conventionalcommits.org/) enfo
 ## License
 
 GPL-3.0 - See [LICENSE](LICENSE) for details.
+
