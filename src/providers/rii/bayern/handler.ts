@@ -2,6 +2,7 @@ import type { ToolResult } from '../../../shared/types.js';
 import { searchBayern, fetchBayernDecision } from './client.js';
 import { convertBayernDecision } from './converter.js';
 import { extractSection } from '../../../shared/extract-section.js';
+import { validateConversion } from '../../../shared/converter.js';
 
 export async function handleBayernSearch(args: Record<string, unknown>): Promise<ToolResult> {
   const { query, limit = 10 } = args as { query: string; limit?: number };
@@ -21,6 +22,7 @@ export async function handleBayernGetDecision(args: Record<string, unknown>): Pr
 
   const html = await fetchBayernDecision(doc_id);
   const d = convertBayernDecision(html);
+  validateConversion(d.content, 'gesetze-bayern.de');
 
   const header = [
     `# ${d.title || d.fileNumber}`,

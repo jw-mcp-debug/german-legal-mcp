@@ -1,5 +1,6 @@
 import { Provider, ToolDefinition, ToolResult } from '../../shared/types.js';
 import { rootLogger } from '../../shared/logger.js';
+import { validateConversion } from '../../shared/converter.js';
 import { invalidateAllSessions, JPORTAL_STATES } from '../../shared/clients/jportal.js';
 import { legisTools } from './tools/index.js';
 import { GiiAdapter } from './adapters/gii.js';
@@ -41,19 +42,11 @@ class LegisProvider implements Provider {
   }
 
   async handleToolCall(toolName: string, args: Record<string, unknown>): Promise<ToolResult> {
-    try {
-      if (toolName === 'legis:search') return await this.handleSearch(args);
-      if (toolName === 'legis:get') return await this.handleGet(args);
-      if (toolName === 'legis:toc') return await this.handleToc(args);
-      if (toolName === 'legis:states') return this.handleStates();
-      return { content: [{ type: 'text', text: `Unknown tool: ${toolName}` }], isError: true };
-    } catch (error) {
-      logger.error('Tool call failed', error as Error, { toolName });
-      return {
-        content: [{ type: 'text', text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
-        isError: true,
-      };
-    }
+    if (toolName === 'legis:search') return await this.handleSearch(args);
+    if (toolName === 'legis:get') return await this.handleGet(args);
+    if (toolName === 'legis:toc') return await this.handleToc(args);
+    if (toolName === 'legis:states') return this.handleStates();
+    return { content: [{ type: 'text', text: `Unknown tool: ${toolName}` }], isError: true };
   }
 
   async shutdown(): Promise<void> {
@@ -81,6 +74,7 @@ class LegisProvider implements Provider {
   private async handleGet(args: Record<string, unknown>): Promise<ToolResult> {
     const { id, state, save_path } = args as { id: string; state: string; save_path?: string };
     const entry = await this.getAdapter(state).get(state, id);
+    validateConversion(entry.content, `Landesrecht ${state}`);
 
     const markdown = `# ${entry.title}\n\n${entry.content}\n\n---\n**Source:** ${entry.url}`;
 

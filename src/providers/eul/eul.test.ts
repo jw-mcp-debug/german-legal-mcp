@@ -122,9 +122,7 @@ describe('EulProvider', () => {
 
     it('should handle search errors', async () => {
       mockGet.mockRejectedValueOnce(new Error('SPARQL timeout'));
-      const result = await eulProvider.handleToolCall('eul:search', { query: 'test' });
-      expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain('SPARQL timeout');
+      await expect(eulProvider.handleToolCall('eul:search', { query: 'test' })).rejects.toThrow('SPARQL timeout');
     });
   });
 
@@ -149,7 +147,7 @@ describe('EulProvider', () => {
     });
 
     it('should extract section by line range', async () => {
-      mockGet.mockResolvedValueOnce({ data: '<p>Line one</p><p>Line two</p>' } as any);
+      mockGet.mockResolvedValueOnce({ data: '<p>Dies ist die erste Zeile mit ausreichend Inhalt für die Validierung.</p><p>Dies ist die zweite Zeile mit weiterem Inhalt.</p>' } as any);
 
       const result = await eulProvider.handleToolCall('eul:get_document', {
         celex: '32001L0029', section: 'lines:1-1',
@@ -158,7 +156,7 @@ describe('EulProvider', () => {
     });
 
     it('should return error for non-existent section', async () => {
-      mockGet.mockResolvedValueOnce({ data: '<p>Simple text</p>' } as any);
+      mockGet.mockResolvedValueOnce({ data: '<p>Dies ist ein einfacher Testtext mit ausreichend Zeichen für die Validierung.</p>' } as any);
 
       const result = await eulProvider.handleToolCall('eul:get_document', {
         celex: '32001L0029', section: 'Art. 999',
@@ -168,7 +166,7 @@ describe('EulProvider', () => {
     });
 
     it('should save to file with save_path', async () => {
-      mockGet.mockResolvedValueOnce({ data: '<p>Content</p>' } as any);
+      mockGet.mockResolvedValueOnce({ data: '<p>Dies ist ein Testinhalt mit ausreichend Zeichen für die Validierung.</p>' } as any);
 
       const result = await eulProvider.handleToolCall('eul:get_document', {
         celex: '32001L0029', save_path: '/tmp/test.md',
@@ -179,9 +177,7 @@ describe('EulProvider', () => {
 
     it('should handle fetch errors', async () => {
       mockGet.mockRejectedValueOnce(new Error('404 Not Found'));
-      const result = await eulProvider.handleToolCall('eul:get_document', { celex: 'INVALID' });
-      expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain('404');
+      await expect(eulProvider.handleToolCall('eul:get_document', { celex: 'INVALID' })).rejects.toThrow('404');
     });
   });
 });

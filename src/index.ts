@@ -7,6 +7,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { z } from 'zod';
 import { Provider, ToolResult } from "./shared/types.js";
+import { BaseError, wrapAxiosError } from "./shared/errors.js";
 import { readFileSync, readdirSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -144,11 +145,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   } catch (error) {
     const duration = Date.now() - startTime;
     logger.error('Tool call failed', error as Error, { tool: name, duration });
+    const wrapped = error instanceof BaseError ? error : wrapAxiosError(error);
+    const text = wrapped
+      ? JSON.stringify(wrapped.toJSON(), null, 2)
+      : `Error: ${error instanceof Error ? error.message : String(error)}`;
     return {
-      content: [{ 
-        type: 'text', 
-        text: `Error: ${error instanceof Error ? error.message : String(error)}\nRequest ID: ${requestId}` 
-      }],
+      content: [{ type: 'text', text }],
       isError: true,
     };
   }

@@ -103,15 +103,13 @@ describe('IcuProvider', () => {
 
     it('should handle search errors', async () => {
       mockPost.mockRejectedValueOnce(new Error('Network error'));
-      const result = await icuProvider.handleToolCall('icu:search', { query: 'test' });
-      expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain('Network error');
+      await expect(icuProvider.handleToolCall('icu:search', { query: 'test' })).rejects.toThrow('Network error');
     });
   });
 
   describe('icu:get_document', () => {
     it('should resolve id_ prefix directly', async () => {
-      mockGet.mockResolvedValueOnce({ data: '<P><A NAME="point1">1</A> Test.</P>' } as any);
+      mockGet.mockResolvedValueOnce({ data: '<P><A NAME="point1">1</A> Dies ist ein Testinhalt mit ausreichend Zeichen für die Validierung.</P>' } as any);
 
       const result = await icuProvider.handleToolCall('icu:get_document', { case_id: 'id_216552' });
       expect(result.isError).toBeUndefined();
@@ -123,7 +121,7 @@ describe('IcuProvider', () => {
     });
 
     it('should resolve numeric ID', async () => {
-      mockGet.mockResolvedValueOnce({ data: '<P>Content</P>' } as any);
+      mockGet.mockResolvedValueOnce({ data: '<P>Dies ist ein Testinhalt mit ausreichend Zeichen für die Validierung.</P>' } as any);
 
       await icuProvider.handleToolCall('icu:get_document', { case_id: '216552' });
       expect(mockGet).toHaveBeenCalledWith(
@@ -136,7 +134,7 @@ describe('IcuProvider', () => {
       mockPost.mockResolvedValueOnce({
         data: { searchHits: [{ content: { logicDocId: 'id_216552' } }] },
       } as any);
-      mockGet.mockResolvedValueOnce({ data: '<P>Urteil</P>' } as any);
+      mockGet.mockResolvedValueOnce({ data: '<P>Dies ist ein Testurteil mit ausreichend Zeichen für die Validierung.</P>' } as any);
 
       await icuProvider.handleToolCall('icu:get_document', { case_id: 'C-476/17' });
       expect(mockPost).toHaveBeenCalledWith(
@@ -150,7 +148,7 @@ describe('IcuProvider', () => {
       mockPost.mockResolvedValueOnce({
         data: { searchHits: [{ content: { logicDocId: 'id_216552' } }] },
       } as any);
-      mockGet.mockResolvedValueOnce({ data: '<P>Urteil</P>' } as any);
+      mockGet.mockResolvedValueOnce({ data: '<P>Dies ist ein Testurteil mit ausreichend Zeichen für die Validierung.</P>' } as any);
 
       await icuProvider.handleToolCall('icu:get_document', { case_id: '62017CJ0476' });
       expect(mockPost).toHaveBeenCalledWith(
@@ -186,7 +184,7 @@ describe('IcuProvider', () => {
     });
 
     it('should return error for non-existent section', async () => {
-      mockGet.mockResolvedValueOnce({ data: '<P>Simple text</P>' } as any);
+      mockGet.mockResolvedValueOnce({ data: '<P>Dies ist ein einfacher Testtext mit ausreichend Zeichen für die Validierung.</P>' } as any);
 
       const result = await icuProvider.handleToolCall('icu:get_document', {
         case_id: 'id_123', section: 'Rn 99',
@@ -196,7 +194,7 @@ describe('IcuProvider', () => {
     });
 
     it('should save to file with save_path', async () => {
-      mockGet.mockResolvedValueOnce({ data: '<P>Content</P>' } as any);
+      mockGet.mockResolvedValueOnce({ data: '<P>Dies ist ein Testinhalt mit ausreichend Zeichen für die Validierung.</P>' } as any);
 
       const result = await icuProvider.handleToolCall('icu:get_document', {
         case_id: 'id_123', save_path: '/tmp/test.md',

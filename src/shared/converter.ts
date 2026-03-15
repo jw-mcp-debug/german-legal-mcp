@@ -21,3 +21,20 @@ export function postProcessMarkdown(body: string): string {
   processed = processed.replace(/\[\]\(null\)/g, '');
   return processed.trim();
 }
+
+const MIN_CONTENT_LENGTH = 20;
+
+/**
+ * Validate that HTML→Markdown conversion produced meaningful output.
+ * Throws if the result is empty or suspiciously short, indicating the
+ * upstream HTML structure may have changed.
+ */
+export function validateConversion(markdown: string, source: string): void {
+  const stripped = markdown.replace(/^#[^\n]*\n/gm, '').replace(/\*\*[^*]+\*\*/g, '').trim();
+  if (stripped.length < MIN_CONTENT_LENGTH) {
+    throw new Error(
+      `${source} returned HTML that produced no meaningful content after conversion. ` +
+      `Their page structure may have changed. Please report this issue.`
+    );
+  }
+}

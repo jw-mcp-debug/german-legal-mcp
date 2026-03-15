@@ -173,7 +173,7 @@ Section formats: `"Rn 5"`, `"Rn 5-12"`, `"lines:100-200"`, or any heading text (
 Documents are converted to pandoc-compatible Markdown:
 
 - Randnummern: `[Rn. 5]{.rn}` (bracketed spans)
-- Footnotes: `[^1]` references with `[^1]: text` definitions
+- Footnotes: `^[inline footnote text]` (pandoc inline footnotes)
 
 ## Development
 
@@ -203,6 +203,8 @@ This repo uses [Conventional Commits](https://www.conventionalcommits.org/) enfo
 - **Cheerio + Turndown** for HTML → pandoc Markdown conversion
 - **Zod** for input validation
 - **Axios** for HTTP requests (Legis, RII, InfoCuria, EUR-Lex, DIP, arXiv)
+- **Structured JSON errors** — all providers return `BaseError.toJSON()` with `code`, `userMessage`, `recoveryHint`; Axios errors auto-wrapped; DNS failures fail fast
+- **Conversion validation** — all HTML→Markdown providers validate output is non-empty; detects upstream layout changes early
 - Tools namespaced by source (`legis:`, `rii:`, `icu:`, `eul:`, `dip:`, `arxiv:`)
 
 ## License

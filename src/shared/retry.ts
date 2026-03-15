@@ -66,7 +66,6 @@ export class RetryStrategy {
       return (
         message.includes('timeout') ||
         message.includes('econnreset') ||
-        message.includes('enotfound') ||
         message.includes('503') ||
         message.includes('502') ||
         message.includes('504')
