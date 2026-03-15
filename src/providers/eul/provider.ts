@@ -2,6 +2,7 @@ import axios from 'axios';
 import { Provider, ToolDefinition, ToolResult } from '../../shared/types.js';
 import { rootLogger } from '../../shared/logger.js';
 import { EulConverter } from './converter.js';
+import { validateConversion } from '../../shared/converter.js';
 import { eulTools } from './tools/index.js';
 
 const logger = rootLogger.child({ module: 'eul-provider' });
@@ -61,25 +62,20 @@ SELECT DISTINCT ?celex ?title WHERE {
   FILTER(CONTAINS(LCASE(?title), LCASE("${query.replace(/"/g, '\\"')}")))
 } LIMIT ${limit}`;
 
-    try {
-      logger.info('Searching EUR-Lex', { query, resource_type });
-      const response = await axios.get(SPARQL_URL, {
-        params: { query: sparql },
-        headers: { 'Accept': 'application/sparql-results+json' },
-      });
+    logger.info('Searching EUR-Lex', { query, resource_type });
+    const response = await axios.get(SPARQL_URL, {
+      params: { query: sparql },
+      headers: { 'Accept': 'application/sparql-results+json' },
+    });
 
-      const bindings = response.data.results?.bindings || [];
-      const markdown = bindings.map((b: Record<string, { value: string }>, i: number) =>
-        `${i + 1}. **${b.celex.value}**\n   ${b.title.value.slice(0, 200)}${b.title.value.length > 200 ? '…' : ''}`
-      ).join('\n\n');
+    const bindings = response.data.results?.bindings || [];
+    const markdown = bindings.map((b: Record<string, { value: string }>, i: number) =>
+      `${i + 1}. **${b.celex.value}**\n   ${b.title.value.slice(0, 200)}${b.title.value.length > 200 ? '…' : ''}`
+    ).join('\n\n');
 
-      return {
-        content: [{ type: 'text', text: `Found ${bindings.length} results:\n\n${markdown}` }],
-      };
-    } catch (error) {
-      logger.error('Search failed', error as Error, { query });
-      return { content: [{ type: 'text', text: `Error: ${error instanceof Error ? error.message : String(error)}` }], isError: true };
-    }
+    return {
+      content: [{ type: 'text', text: `Found ${bindings.length} results:\n\n${markdown}` }],
+    };
   }
 
   private async handleGetDocument(args: Record<string, unknown>): Promise<ToolResult> {
@@ -87,41 +83,37 @@ SELECT DISTINCT ?celex ?title WHERE {
       celex: string; language?: string; section?: string; save_path?: string;
     };
 
-    try {
-      logger.info('Fetching EUR-Lex document', { celex, language });
+    logger.info('Fetching EUR-Lex document', { celex, language });
 
-      const response = await axios.get(`${CELLAR_BASE}/${celex}`, {
-        headers: {
-          'Accept': 'text/html, application/xhtml+xml',
-          'Accept-Language': `${language.toLowerCase()}, en;q=0.8`,
-        },
-        maxRedirects: 5,
-        responseType: 'text',
-      });
+    const response = await axios.get(`${CELLAR_BASE}/${celex}`, {
+      headers: {
+        'Accept': 'text/html, application/xhtml+xml',
+        'Accept-Language': `${language.toLowerCase()}, en;q=0.8`,
+      },
+      maxRedirects: 5,
+      responseType: 'text',
+    });
 
-      const markdown = this.converter.convert(response.data);
+    const markdown = this.converter.convert(response.data);
+    validateConversion(markdown, 'EUR-Lex');
 
-      if (section) {
-        const extracted = this.extractSection(markdown, section);
-        if (!extracted) {
-          return { content: [{ type: 'text', text: `Section "${section}" not found.` }], isError: true };
-        }
-        return { content: [{ type: 'text', text: extracted }] };
+    if (section) {
+      const extracted = this.extractSection(markdown, section);
+      if (!extracted) {
+        return { content: [{ type: 'text', text: `Section "${section}" not found.` }], isError: true };
       }
-
-      const fullDoc = `# ${celex}\n\n---\n\n${markdown}`;
-
-      if (save_path) {
-        const { writeFile } = await import('fs/promises');
-        await writeFile(save_path, fullDoc, 'utf-8');
-        return { content: [{ type: 'text', text: `Saved to ${save_path}\n\nCELEX: ${celex}\nLanguage: ${language}` }] };
-      }
-
-      return { content: [{ type: 'text', text: fullDoc }] };
-    } catch (error) {
-      logger.error('Failed to get document', error as Error, { celex });
-      return { content: [{ type: 'text', text: `Error: ${error instanceof Error ? error.message : String(error)}` }], isError: true };
+      return { content: [{ type: 'text', text: extracted }] };
     }
+
+    const fullDoc = `# ${celex}\n\n---\n\n${markdown}`;
+
+    if (save_path) {
+      const { writeFile } = await import('fs/promises');
+      await writeFile(save_path, fullDoc, 'utf-8');
+      return { content: [{ type: 'text', text: `Saved to ${save_path}\n\nCELEX: ${celex}\nLanguage: ${language}` }] };
+    }
+
+    return { content: [{ type: 'text', text: fullDoc }] };
   }
 
   private extractSection(markdown: string, section: string): string | null {

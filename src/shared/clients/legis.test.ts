@@ -223,7 +223,7 @@ describe('LegisProvider', () => {
         '<html><body>' +
         '<div class="jnheader"><h1>BGB</h1></div>' +
         '<span class="jnenbez">§ 1</span><span class="jnentitel">Test</span>' +
-        '<div class="jnhtml"><p>Content</p></div>' +
+        '<div class="jnhtml"><p>Wer vorsätzlich oder fahrlässig das Leben, den Körper, die Gesundheit oder die Freiheit verletzt.</p></div>' +
         '</body></html>',
         'latin1',
       ),
@@ -231,21 +231,17 @@ describe('LegisProvider', () => {
 
     const result = await provider.handleToolCall('legis:get', { id: 'bgb/1', state: 'BUND' });
     expect(result.isError).toBeUndefined();
-    expect(result.content[0].text).toContain('Content');
+    expect(result.content[0].text).toContain('vorsätzlich');
   });
 
   it('should reject BUND search', async () => {
     const provider = await getProvider();
-    const result = await provider.handleToolCall('legis:search', { query: 'test', state: 'BUND' });
-    expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain('does not support search');
+    await expect(provider.handleToolCall('legis:search', { query: 'test', state: 'BUND' })).rejects.toThrow('does not support search');
   });
 
   it('should reject invalid BUND id format', async () => {
     const provider = await getProvider();
-    const result = await provider.handleToolCall('legis:get', { id: 'bgb823', state: 'BUND' });
-    expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain('law/section');
+    await expect(provider.handleToolCall('legis:get', { id: 'bgb823', state: 'BUND' })).rejects.toThrow('law/section');
   });
 
   it('should handle NI search', async () => {
@@ -273,9 +269,7 @@ describe('LegisProvider', () => {
 
   it('should reject unsupported state', async () => {
     const provider = await getProvider();
-    const result = await provider.handleToolCall('legis:get', { id: 'test', state: 'XX' });
-    expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain('not yet supported');
+    await expect(provider.handleToolCall('legis:get', { id: 'test', state: 'XX' })).rejects.toThrow('not yet supported');
   });
 
   it('should save to file with save_path', async () => {

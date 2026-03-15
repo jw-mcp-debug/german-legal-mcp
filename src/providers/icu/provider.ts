@@ -2,6 +2,7 @@ import axios from 'axios';
 import { Provider, ToolDefinition, ToolResult } from '../../shared/types.js';
 import { rootLogger } from '../../shared/logger.js';
 import { IcuConverter } from './converter.js';
+import { validateConversion } from '../../shared/converter.js';
 import { icuTools } from './tools/index.js';
 
 const logger = rootLogger.child({ module: 'icu-provider' });
@@ -39,39 +40,34 @@ export class IcuProvider implements Provider {
   private async handleSearch(args: Record<string, unknown>): Promise<ToolResult> {
     const { query, language = 'DE', limit = 10 } = args as { query: string; language?: string; limit?: number };
 
-    try {
-      logger.info('Searching InfoCuria', { query, language });
+    logger.info('Searching InfoCuria', { query, language });
 
-      const response = await axios.post(SEARCH_URL, {
-        searchTerm: query,
-        multiSearchTerms: [],
-        sortTermList: [{ sortDirection: 'DESC', sortTerm: 'ALL_DATES' }],
-        pagination: { pageNumber: 0, pageSize: limit, from: 1, to: limit * 2 },
-        language: language.toUpperCase(),
-        tabName: 'tout_jurisprudence',
-        isAllTabsRequest: false,
-        isSearchExact: true,
-        searchSources: ['document', 'metadata'],
-        ecli: '', publishedId: '', usualName: '', logicDocId: '',
-      }, { headers: HEADERS });
+    const response = await axios.post(SEARCH_URL, {
+      searchTerm: query,
+      multiSearchTerms: [],
+      sortTermList: [{ sortDirection: 'DESC', sortTerm: 'ALL_DATES' }],
+      pagination: { pageNumber: 0, pageSize: limit, from: 1, to: limit * 2 },
+      language: language.toUpperCase(),
+      tabName: 'tout_jurisprudence',
+      isAllTabsRequest: false,
+      isSearchExact: true,
+      searchSources: ['document', 'metadata'],
+      ecli: '', publishedId: '', usualName: '', logicDocId: '',
+    }, { headers: HEADERS });
 
-      const hits = response.data.searchHits || [];
-      const markdown = hits.map((hit: Record<string, Record<string, string>>, i: number) => {
-        const c = hit.content;
-        return `${i + 1}. **${c.docType}, ${c.docDate}, ${c.idPublished}**\n` +
-          `   - ECLI: ${c.ecli || 'n/a'}\n` +
-          `   - CELEX: \`${c.celex}\`\n` +
-          `   - Court: ${c.affairJurisdiction}\n` +
-          `   - Logic Doc ID: \`${c.logicDocId}\``;
-      }).join('\n\n');
+    const hits = response.data.searchHits || [];
+    const markdown = hits.map((hit: Record<string, Record<string, string>>, i: number) => {
+      const c = hit.content;
+      return `${i + 1}. **${c.docType}, ${c.docDate}, ${c.idPublished}**\n` +
+        `   - ECLI: ${c.ecli || 'n/a'}\n` +
+        `   - CELEX: \`${c.celex}\`\n` +
+        `   - Court: ${c.affairJurisdiction}\n` +
+        `   - Logic Doc ID: \`${c.logicDocId}\``;
+    }).join('\n\n');
 
-      return {
-        content: [{ type: 'text', text: `Found ${response.data.totalHits} results (showing ${hits.length}):\n\n${markdown}` }],
-      };
-    } catch (error) {
-      logger.error('Search failed', error as Error, { query });
-      return { content: [{ type: 'text', text: `Error: ${error instanceof Error ? error.message : String(error)}` }], isError: true };
-    }
+    return {
+      content: [{ type: 'text', text: `Found ${response.data.totalHits} results (showing ${hits.length}):\n\n${markdown}` }],
+    };
   }
 
   private async handleGetDocument(args: Record<string, unknown>): Promise<ToolResult> {
@@ -79,45 +75,41 @@ export class IcuProvider implements Provider {
       case_id: string; language?: string; section?: string; save_path?: string;
     };
 
-    try {
-      // Resolve case_id to logicDocId via search
-      const logicDocId = await this.resolveLogicDocId(case_id, language as string);
-      if (!logicDocId) {
-        return { content: [{ type: 'text', text: `No document found for "${case_id}" in ${language}` }], isError: true };
-      }
-
-      const numericId = logicDocId.replace('id_', '');
-      logger.info('Fetching document', { case_id, numericId, language });
-
-      const response = await axios.get(`${BLOB_URL}/${numericId}/${language.toUpperCase()}/html`, {
-        headers: { 'Origin': 'https://infocuria.curia.europa.eu' },
-        responseType: 'text',
-      });
-
-      const markdown = this.converter.convert(response.data);
-
-      // Section extraction
-      if (section) {
-        const extracted = this.extractSection(markdown, section);
-        if (!extracted) {
-          return { content: [{ type: 'text', text: `Section "${section}" not found.` }], isError: true };
-        }
-        return { content: [{ type: 'text', text: extracted }] };
-      }
-
-      const fullDoc = `# ${case_id}\n\n---\n\n${markdown}`;
-
-      if (save_path) {
-        const { writeFile } = await import('fs/promises');
-        await writeFile(save_path, fullDoc, 'utf-8');
-        return { content: [{ type: 'text', text: `Saved to ${save_path}\n\nCase: ${case_id}\nLanguage: ${language}` }] };
-      }
-
-      return { content: [{ type: 'text', text: fullDoc }] };
-    } catch (error) {
-      logger.error('Failed to get document', error as Error, { case_id });
-      return { content: [{ type: 'text', text: `Error: ${error instanceof Error ? error.message : String(error)}` }], isError: true };
+    // Resolve case_id to logicDocId via search
+    const logicDocId = await this.resolveLogicDocId(case_id, language as string);
+    if (!logicDocId) {
+      return { content: [{ type: 'text', text: `No document found for "${case_id}" in ${language}` }], isError: true };
     }
+
+    const numericId = logicDocId.replace('id_', '');
+    logger.info('Fetching document', { case_id, numericId, language });
+
+    const response = await axios.get(`${BLOB_URL}/${numericId}/${language.toUpperCase()}/html`, {
+      headers: { 'Origin': 'https://infocuria.curia.europa.eu' },
+      responseType: 'text',
+    });
+
+    const markdown = this.converter.convert(response.data);
+    validateConversion(markdown, 'InfoCuria');
+
+    // Section extraction
+    if (section) {
+      const extracted = this.extractSection(markdown, section);
+      if (!extracted) {
+        return { content: [{ type: 'text', text: `Section "${section}" not found.` }], isError: true };
+      }
+      return { content: [{ type: 'text', text: extracted }] };
+    }
+
+    const fullDoc = `# ${case_id}\n\n---\n\n${markdown}`;
+
+    if (save_path) {
+      const { writeFile } = await import('fs/promises');
+      await writeFile(save_path, fullDoc, 'utf-8');
+      return { content: [{ type: 'text', text: `Saved to ${save_path}\n\nCase: ${case_id}\nLanguage: ${language}` }] };
+    }
+
+    return { content: [{ type: 'text', text: fullDoc }] };
   }
 
   private async resolveLogicDocId(caseId: string, language: string): Promise<string | null> {
