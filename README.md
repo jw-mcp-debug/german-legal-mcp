@@ -1,9 +1,9 @@
 # German Legal MCP Server
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
-[![Node.js Version](https://img.shields.io/badge/node-%3E%3D22.0.0-brightgreen)](https://nodejs.org/)
+[![Node.js Version](https://img.shields.io/badge/node-%3E%3D25.0.0-brightgreen)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue)](https://www.typescriptlang.org/)
-[![MCP](https://img.shields.io/badge/MCP-1.26-purple)](https://modelcontextprotocol.io/)
+[![MCP](https://img.shields.io/badge/MCP-1.27-purple)](https://modelcontextprotocol.io/)
 
 > **⚠️ WARNING: Work in Progress**  
 > This project is currently under active development and **not production-ready**. APIs may change without notice, and features may be incomplete or unstable. Use at your own risk.
@@ -20,6 +20,7 @@ A Model Context Protocol (MCP) server for German legal research, providing unifi
 | [EUR-Lex](https://eur-lex.europa.eu) | ✅ Available | `eul:` | None (public) |
 | [DIP Bundestag](https://dip.bundestag.de) | ✅ Available | `dip:` | Public key included |
 | [arXiv](https://arxiv.org) | ✅ Available | `arxiv:` | None (public) |
+| [nautos.de](https://nautos.de) | ✅ Available | `nautos:` | Required (IP or credentials) |
 
 ## Features
 
@@ -76,6 +77,14 @@ A Model Context Protocol (MCP) server for German legal research, providing unifi
 - **No authentication** — free public API, no rate limits beyond ~1 req/3s
 - **Save to file** — `save_path` parameter to avoid context pollution
 
+### nautos.de (`nautos:*` tools)
+- **DIN/EN/ISO standards** — search and retrieve technical standards from nautos.de
+- **Two-phase document retrieval** — outline (metadata + TOC) first, then sections on demand
+- **Automatic authentication** — IP-based login (auto-detected), user-based login fallback
+- **Structured TOC** — hierarchical table of contents with section IDs for navigation
+- **File cache** — 30-day TTL, persistent across restarts (`~/.local/share/german-legal-mcp/cache/nautos/`)
+- **Save to file** — `save_path` parameter to dump full document to disk
+
 ## Quick Start with npx
 
 ```bash
@@ -108,7 +117,19 @@ or add your MCP client config (e.g., `claude_desktop_config.json`):
 | `GLMCP_DIP_ENABLED` | `true` | DIP Bundestag (auto-disabled after 2026-06-01 without own key) |
 | `GLMCP_DIP_API_KEY` | Public key | Override the bundled public API key |
 | `GLMCP_ARXIV_ENABLED` | `true` | arXiv preprint search |
+| `GLMCP_NAUTOS_ENABLED` | Auto | nautos.de. Auto-enabled with tenant key or credentials, auto-disabled without. |
 
+
+### nautos.de Configuration
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `GLMCP_NAUTOS_TENANT_KEY` | For IP-based | Tenant key (e.g., `DWW`). Enables IP-based authentication. |
+| `GLMCP_NAUTOS_USERNAME` | For user-based | nautos.de account username |
+| `GLMCP_NAUTOS_PASSWORD` | For user-based | nautos.de account password |
+| `GLMCP_NAUTOS_TENANT_ID` | No | Tenant ID (auto-detected from login response) |
+
+**Authentication**: IP-based login is tried first (requires `GLMCP_NAUTOS_TENANT_KEY`). If it fails and credentials are set, user-based login is attempted as fallback.
 
 ## Tools
 
@@ -158,6 +179,13 @@ or add your MCP client config (e.g., `claude_desktop_config.json`):
 | `arxiv:search` | Search preprints by keywords, author, title, abstract, or category. Returns metadata + abstract. |
 | `arxiv:get` | Retrieve paper by arXiv ID. Default: metadata + abstract. With `section` or `save_path`: HTML full text as Markdown (~2024+, older: PDF link). |
 
+### nautos.de
+
+| Tool | Description |
+|------|-------------|
+| `nautos:search` | Search DIN/EN/ISO standards by document number. Returns acCode, title, date, type. |
+| `nautos:get_document` | Retrieve standard by acCode. Returns outline (metadata + TOC) by default; use `section` for specific parts, `save_path` to save full document. |
+
 ### Two-Phase Document Retrieval
 
 All document tools use a two-phase approach to avoid flooding the LLM context:
@@ -195,17 +223,17 @@ This repo uses [Conventional Commits](https://www.conventionalcommits.org/) enfo
 
 **Types:** `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `chore`, `ci`, `build`, `revert`
 
-**Scopes:** `legis`, `rii`, `icu`, `eul`, `dip`, `core`, `deps`, `config`
+**Scopes:** `legis`, `rii`, `icu`, `eul`, `dip`, `nautos`, `core`, `deps`, `config`
 
 ## Architecture
 
 - **Dynamic provider loading** — providers auto-discovered from `src/providers/*/`
 - **Cheerio + Turndown** for HTML → pandoc Markdown conversion
 - **Zod** for input validation
-- **Axios** for HTTP requests (Legis, RII, InfoCuria, EUR-Lex, DIP, arXiv)
+- **Axios** for HTTP requests (Legis, RII, InfoCuria, EUR-Lex, DIP, arXiv, nautos)
 - **Structured JSON errors** — all providers return `BaseError.toJSON()` with `code`, `userMessage`, `recoveryHint`; Axios errors auto-wrapped; DNS failures fail fast
 - **Conversion validation** — all HTML→Markdown providers validate output is non-empty; detects upstream layout changes early
-- Tools namespaced by source (`legis:`, `rii:`, `icu:`, `eul:`, `dip:`, `arxiv:`)
+- Tools namespaced by source (`legis:`, `rii:`, `icu:`, `eul:`, `dip:`, `arxiv:`, `nautos:`)
 
 ## License
 

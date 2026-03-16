@@ -101,11 +101,14 @@ async function shutdownAllProviders(): Promise<void> {
   }
 }
 
+// Read version from package.json
+const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf-8'));
+
 // Create MCP server
 const server = new Server(
   {
     name: "german-legal-mcp",
-    version: "1.0.0",
+    version: pkg.version,
   },
   {
     capabilities: {
