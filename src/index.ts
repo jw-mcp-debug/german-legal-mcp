@@ -26,8 +26,30 @@ if (process.argv.includes('--version') || process.argv.includes('-v')) {
 
 // Handle --help flag
 if (process.argv.includes('--help') || process.argv.includes('-h')) {
+  const pkg = JSON.parse(readFileSync(join(__dirname, '../package.json'), 'utf-8'));
+
+  // Load providers to list tools
+  const helpTools: { name: string; description: string }[] = [];
+  const providersDir = join(__dirname, 'providers');
+  for (const entry of readdirSync(providersDir, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    try {
+      const mod = await import(`./providers/${entry.name}/index.js`);
+      if (typeof mod.createProvider === 'function') {
+        const provider = mod.createProvider() as Provider | null;
+        if (provider) for (const t of provider.getTools()) helpTools.push({ name: t.name, description: t.description });
+      }
+    } catch { /* skip unavailable providers */ }
+  }
+
+  const maxName = Math.max(...helpTools.map(t => t.name.length));
+  const toolLines = helpTools
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map(t => `  ${t.name.padEnd(maxName + 2)}${t.description.split('.')[0]}.`)
+    .join('\n');
+
   console.log(`
-German Legal MCP Server v${JSON.parse(readFileSync(join(__dirname, '../package.json'), 'utf-8')).version}
+German Legal MCP Server v${pkg.version}
 
 A Model Context Protocol server for German legal research.
 
@@ -37,6 +59,9 @@ USAGE:
 OPTIONS:
   -h, --help       Print this help message
   -v, --version    Print version number
+
+TOOLS (${helpTools.length}):
+${toolLines}
 
 For more information, visit:
   https://github.com/metaneutrons/german-legal-mcp

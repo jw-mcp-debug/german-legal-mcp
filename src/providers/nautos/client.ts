@@ -179,10 +179,10 @@ export class NautosClient {
       const { data: lockRaw } = await api.get(`/documentaccess/simultaneously/${din21Id}`);
       const lockId = String(lockRaw).replace(/"/g, '');
       const { data: octaRaw } = await api.get('/octa/token', { params: { din21id: din21Id, lockId } });
-      const octaMatch = String(octaRaw).match(/:([A-F0-9]{64})/i);
-      if (!octaMatch) throw new Error(`Invalid OCTA token format: ${String(octaRaw).slice(0, 40)}`);
+      const octaToken = typeof octaRaw === 'object' ? octaRaw.octaToken : String(octaRaw).match(/:([A-F0-9]{64})/i)?.[1];
+      if (!octaToken) throw new Error(`Invalid OCTA token format: ${JSON.stringify(octaRaw).slice(0, 80)}`);
       const { data: authData } = await this.nv.post('/auth/user', {
-        isFullscreen: false, token: octaMatch[1], subuser: '',
+        isFullscreen: false, token: octaToken, subuser: '',
         contextid: 'octa', lang: 'de', url: `${nautosConfig.baseUrl}/api/nv/nv-rest/`,
       });
       const xSHI = authData.xSHISecurity;
