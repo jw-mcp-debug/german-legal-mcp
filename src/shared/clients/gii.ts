@@ -64,7 +64,7 @@ export async function giiGetLegislation(law: string, section: string): Promise<G
     };
   } catch (error) {
     if (axios.isAxiosError(error) && error.response?.status === 404) {
-      throw new Error(`Legislation not found: ${law} ${section}`);
+      throw new Error(`Legislation not found: ${law} ${section}`, { cause: error });
     }
     throw error;
   }
