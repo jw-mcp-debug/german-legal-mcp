@@ -106,6 +106,18 @@ function parseJwtExp(jwt: string): number {
   catch { return 0; }
 }
 
+/** Normalize TOC sections — API returns single object or array; recurse into children */
+function normalizeSections(raw: unknown): TocSection[] {
+  if (!raw) return [];
+  const arr = Array.isArray(raw) ? raw : [raw];
+  return arr.map((s: Record<string, unknown>) => ({
+    id: s.id as string,
+    label: s.label as string | undefined,
+    title: (s.title as string ?? '').replace(/\n/g, ' '),
+    ...(s.section ? { section: normalizeSections(s.section) } : {}),
+  }));
+}
+
 // --- Client ---
 
 export class NautosClient {
@@ -200,7 +212,7 @@ export class NautosClient {
       const { data } = await this.nv.get(`/${din21Id}/toc`, {
         params: { lang: 'de' }, headers: { 'X-SHI-SECURITY': xSHI },
       });
-      return data?.body?.toc?.section ?? [];
+      return normalizeSections(data?.body?.toc?.section);
     } catch (e) { throw wrapAxiosError(e) ?? e; }
   }
 
