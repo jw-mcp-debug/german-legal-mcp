@@ -183,9 +183,20 @@ export class NautosClient {
 
   // --- NV Viewer Auth Chain ---
 
+  private authPending = new Map<string, Promise<string>>();
+
   private async authenticate(din21Id: string): Promise<string> {
     const cached = getCachedViewerAuth(din21Id);
     if (cached) return cached;
+    // Serialize concurrent auth for same din21Id
+    const pending = this.authPending.get(din21Id);
+    if (pending) return pending;
+    const p = this.doAuthenticate(din21Id).finally(() => this.authPending.delete(din21Id));
+    this.authPending.set(din21Id, p);
+    return p;
+  }
+
+  private async doAuthenticate(din21Id: string): Promise<string> {
     try {
       const api = await this.api();
       const { data: lockRaw } = await api.get(`/documentaccess/simultaneously/${din21Id}`);
