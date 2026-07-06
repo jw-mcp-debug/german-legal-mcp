@@ -14,7 +14,7 @@ export class BremenAdapter implements LegisAdapter {
   readonly states = ['HB'] as const;
 
   async search(_state: string, query: string, limit: number): Promise<SearchResult[]> {
-    const resp = await axios.get(`${BASE}/sixcms/detail.php`, {
+    const resp = await axios.get<string>(`${BASE}/sixcms/detail.php`, {
       params: {
         template: '20_search_d',
         'search[send]': 'true',
@@ -31,15 +31,16 @@ export class BremenAdapter implements LegisAdapter {
       const text = $(el).text().trim();
       if (!text || text.length < 5 || text.includes('Zur Inhaltsseite') || text.includes('zur News') || results.length >= limit) return;
       const match = href.match(/-(\d+)\?/);
-      if (match && !results.some((r) => r.id === match[1])) {
-        results.push({ id: match[1], title: text, subtitle: '', date: '' });
+      const id = match?.[1];
+      if (id !== undefined && !results.some((r) => r.id === id)) {
+        results.push({ id, title: text, subtitle: '', date: '' });
       }
     });
     return results;
   }
 
   async get(_state: string, id: string): Promise<LegisEntry> {
-    const resp = await axios.get(docUrl(id), { maxRedirects: 5 });
+    const resp = await axios.get<string>(docUrl(id), { maxRedirects: 5 });
     const $ = load(resp.data);
 
     const title = $('title').text().replace(/\s*-\s*Transparenzportal Bremen$/, '').trim();

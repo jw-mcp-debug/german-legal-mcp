@@ -1,8 +1,10 @@
 import axios from 'axios';
+import type { AxiosInstance } from 'axios';
 import { Provider, ToolDefinition, ToolResult } from '../../shared/types.js';
 import { rootLogger } from '../../shared/logger.js';
 import { EulConverter } from './converter.js';
 import { validateConversion } from '../../shared/converter.js';
+import { saveToFile } from '../../shared/save-to-file.js';
 import { eulTools } from './tools/index.js';
 
 const logger = rootLogger.child({ module: 'eul-provider' });
@@ -20,11 +22,11 @@ const RESOURCE_TYPES: Record<string, string> = {
 
 export class EulProvider implements Provider {
   readonly name = 'eul';
-  private converter: EulConverter;
 
-  constructor() {
-    this.converter = new EulConverter();
-  }
+  constructor(
+    private readonly http: Pick<AxiosInstance, 'get'> = axios,
+    private readonly converter: EulConverter = new EulConverter(),
+  ) {}
 
   getTools(): ToolDefinition[] {
     return eulTools;
@@ -37,7 +39,7 @@ export class EulProvider implements Provider {
   }
 
   async shutdown(): Promise<void> {
-    logger.info('ELU provider shutdown');
+    logger.info('EUL provider shutdown');
   }
 
   private async handleSearch(args: Record<string, unknown>): Promise<ToolResult> {
@@ -63,15 +65,17 @@ SELECT DISTINCT ?celex ?title WHERE {
 } LIMIT ${limit}`;
 
     logger.info('Searching EUR-Lex', { query, resource_type });
-    const response = await axios.get(SPARQL_URL, {
+    const response = await this.http.get(SPARQL_URL, {
       params: { query: sparql },
       headers: { 'Accept': 'application/sparql-results+json' },
     });
 
     const bindings = response.data.results?.bindings || [];
-    const markdown = bindings.map((b: Record<string, { value: string }>, i: number) =>
-      `${i + 1}. **${b.celex.value}**\n   ${b.title.value.slice(0, 200)}${b.title.value.length > 200 ? '…' : ''}`
-    ).join('\n\n');
+    const markdown = bindings.map((b: Record<string, { value: string }>, i: number) => {
+      const celex = b.celex?.value ?? 'unknown';
+      const title = b.title?.value ?? '';
+      return `${i + 1}. **${celex}**\n   ${title.slice(0, 200)}${title.length > 200 ? '…' : ''}`;
+    }).join('\n\n');
 
     return {
       content: [{ type: 'text', text: `Found ${bindings.length} results:\n\n${markdown}` }],
@@ -85,7 +89,7 @@ SELECT DISTINCT ?celex ?title WHERE {
 
     logger.info('Fetching EUR-Lex document', { celex, language });
 
-    const response = await axios.get(`${CELLAR_BASE}/${celex}`, {
+    const response = await this.http.get<string>(`${CELLAR_BASE}/${celex}`, {
       headers: {
         'Accept': 'text/html, application/xhtml+xml',
         'Accept-Language': `${language.toLowerCase()}, en;q=0.8`,
@@ -108,9 +112,7 @@ SELECT DISTINCT ?celex ?title WHERE {
     const fullDoc = `# ${celex}\n\n---\n\n${markdown}`;
 
     if (save_path) {
-      const { writeFile } = await import('fs/promises');
-      await writeFile(save_path, fullDoc, 'utf-8');
-      return { content: [{ type: 'text', text: `Saved to ${save_path}\n\nCELEX: ${celex}\nLanguage: ${language}` }] };
+      return saveToFile(save_path, fullDoc, `CELEX: ${celex}\nLanguage: ${language}`);
     }
 
     return { content: [{ type: 'text', text: fullDoc }] };
@@ -122,16 +124,16 @@ SELECT DISTINCT ?celex ?title WHERE {
     // lines:100-200
     const lineMatch = section.match(/^lines?:(\d+)-(\d+)$/i);
     if (lineMatch) {
-      const start = Math.max(1, parseInt(lineMatch[1])) - 1;
-      const end = Math.min(lines.length, parseInt(lineMatch[2]));
+      const start = Math.max(1, Number.parseInt(lineMatch[1] ?? '1')) - 1;
+      const end = Math.min(lines.length, Number.parseInt(lineMatch[2] ?? '1'));
       return lines.slice(start, end).join('\n');
     }
 
     // Art. 5 or Artikel 5 or Artikel 5-10
     const artMatch = section.match(/^Art(?:ikel)?\.?\s*(\d+)(?:\s*[-–]\s*(\d+))?$/i);
     if (artMatch) {
-      const artStart = parseInt(artMatch[1]);
-      const artEnd = artMatch[2] ? parseInt(artMatch[2]) : artStart;
+      const artStart = Number.parseInt(artMatch[1] ?? '0');
+      const artEnd = artMatch[2] ? Number.parseInt(artMatch[2]) : artStart;
       return this.extractArticleRange(lines, artStart, artEnd);
     }
 
@@ -140,10 +142,10 @@ SELECT DISTINCT ?celex ?title WHERE {
     let startIdx = -1;
     let startLevel = 0;
     for (let i = 0; i < lines.length; i++) {
-      const hm = lines[i].match(/^(#{1,6})\s+(.+)/);
+      const hm = lines[i]?.match(/^(#{1,6})\s+(.+)/);
       if (!hm) continue;
-      const level = hm[1].length;
-      const text = hm[2].toLowerCase();
+      const level = hm[1]?.length ?? 0;
+      const text = hm[2]?.toLowerCase() ?? '';
       if (startIdx === -1) {
         if (text.includes(q)) { startIdx = i; startLevel = level; }
       } else if (level <= startLevel) {
@@ -160,9 +162,9 @@ SELECT DISTINCT ?celex ?title WHERE {
     const artPattern = /^#{1,3}\s+Artikel\s+(\d+)/;
 
     for (let i = 0; i < lines.length; i++) {
-      const m = lines[i].match(artPattern);
+      const m = lines[i]?.match(artPattern);
       if (!m) continue;
-      const num = parseInt(m[1]);
+      const num = Number.parseInt(m[1] ?? '0');
       if (num === artStart && startIdx === -1) startIdx = i;
       if (num > artEnd && startIdx !== -1) { endIdx = i; break; }
     }
@@ -171,4 +173,3 @@ SELECT DISTINCT ?celex ?title WHERE {
     return lines.slice(startIdx, endIdx).join('\n');
   }
 }
-

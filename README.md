@@ -2,8 +2,8 @@
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D25.0.0-brightgreen)](https://nodejs.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue)](https://www.typescriptlang.org/)
-[![MCP](https://img.shields.io/badge/MCP-1.27-purple)](https://modelcontextprotocol.io/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-6.0-blue)](https://www.typescriptlang.org/)
+[![MCP](https://img.shields.io/badge/MCP-1.29-purple)](https://modelcontextprotocol.io/)
 
 > **⚠️ WARNING: Work in Progress**  
 > This project is currently under active development and **not production-ready**. APIs may change without notice, and features may be incomplete or unstable. Use at your own risk.
@@ -66,7 +66,7 @@ A Model Context Protocol (MCP) server for German legal research, providing unifi
 - **Legislative processes** — Vorgänge with status tracking and linked documents
 - **Debate transcripts** — full text search across Plenarprotokolle (BT and BR)
 - **Full text retrieval** — extracted text including Gesetzesbegründungen, with section support
-- **Public API key included** — works out of the box (key expires 2026-06-01, override via env var)
+- **Public API key included** — works out of the box (key valid until end of May 2027, override via env var)
 - **Save to file** — `save_path` parameter to avoid context pollution
 
 ### arXiv (`arxiv:*` tools)
@@ -110,11 +110,13 @@ or add your MCP client config (e.g., `claude_desktop_config.json`):
 
 | Variable | Default | Description |
 |----------|---------|-------------|
+| `GLMCP_STATE_DIR` | Platform default | Root directory for logs, sessions, caches, metrics, daemon sockets and locks. |
+| `GLMCP_LOG_LEVEL` | `info` | Structured log level. |
 | `GLMCP_LEGIS_ENABLED` | `true` | Bundes- & Landesrecht |
 | `GLMCP_RII_ENABLED` | `true` | Rechtsprechung im Internet |
 | `GLMCP_ICU_ENABLED` | `true` | InfoCuria (CJEU) |
 | `GLMCP_EUL_ENABLED` | `true` | EUR-Lex |
-| `GLMCP_DIP_ENABLED` | `true` | DIP Bundestag (auto-disabled after 2026-06-01 without own key) |
+| `GLMCP_DIP_ENABLED` | `true` | DIP Bundestag (auto-disabled after 2027-06-01 without own key) |
 | `GLMCP_DIP_API_KEY` | Public key | Override the bundled public API key |
 | `GLMCP_ARXIV_ENABLED` | `true` | arXiv preprint search |
 | `GLMCP_NAUTOS_ENABLED` | Auto | nautos.de. Auto-enabled with tenant key or credentials, auto-disabled without. |
@@ -130,6 +132,7 @@ or add your MCP client config (e.g., `claude_desktop_config.json`):
 | `GLMCP_NAUTOS_TENANT_ID` | No | Tenant ID (auto-detected from login response) |
 
 **Authentication**: IP-based login is tried first (requires `GLMCP_NAUTOS_TENANT_KEY`). If it fails and credentials are set, user-based login is attempted as fallback.
+
 
 ## Tools
 
@@ -227,7 +230,8 @@ This repo uses [Conventional Commits](https://www.conventionalcommits.org/) enfo
 
 ## Architecture
 
-- **Dynamic provider loading** — providers auto-discovered from `src/providers/*/`
+- **Manifest-driven providers** — startup, help, shutdown and public/private
+  distribution use one checked provider manifest
 - **Cheerio + Turndown** for HTML → pandoc Markdown conversion
 - **Zod** for input validation
 - **Axios** for HTTP requests (Legis, RII, InfoCuria, EUR-Lex, DIP, arXiv, nautos)
@@ -238,4 +242,3 @@ This repo uses [Conventional Commits](https://www.conventionalcommits.org/) enfo
 ## License
 
 GPL-3.0 - See [LICENSE](LICENSE) for details.
-

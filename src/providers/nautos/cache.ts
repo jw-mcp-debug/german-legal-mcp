@@ -1,10 +1,11 @@
 import { join } from 'path';
-import { homedir } from 'os';
-import { readFile, writeFile, mkdir, readdir, stat, unlink } from 'fs/promises';
+import { readFile, mkdir, readdir, stat, unlink, utimes } from 'fs/promises';
 import { createHash } from 'crypto';
 import type { TocSection, DocumentDetail } from './client.js';
+import { cachePath } from '../../shared/state-paths.js';
+import { atomicWriteJson } from '../../shared/persistence.js';
 
-const CACHE_DIR = join(homedir(), '.local', 'share', 'german-legal-mcp', 'cache', 'nautos');
+const CACHE_DIR = cachePath('nautos');
 const TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 const MAX_ENTRIES = 500;
 
@@ -28,16 +29,19 @@ async function ensureDir(): Promise<void> {
 
 export async function get(acCode: string): Promise<CachedDocument | null> {
   try {
-    const raw = await readFile(docPath(acCode), 'utf-8');
+    const path = docPath(acCode);
+    const raw = await readFile(path, 'utf-8');
     const doc: CachedDocument = JSON.parse(raw);
     if (Date.now() - doc.fetchedAt > TTL_MS) return null;
+    const now = new Date();
+    await utimes(path, now, now).catch(() => {});
     return doc;
   } catch { return null; }
 }
 
 export async function put(doc: CachedDocument): Promise<void> {
   await ensureDir();
-  await writeFile(docPath(doc.acCode), JSON.stringify(doc), 'utf-8');
+  await atomicWriteJson(docPath(doc.acCode), doc, { serialize: true });
   evict().catch(() => {});
 }
 
@@ -45,10 +49,14 @@ export async function putSection(acCode: string, sectionId: string, markdown: st
   const doc = await get(acCode);
   if (!doc) return;
   doc.sections[sectionId] = markdown;
-  await writeFile(docPath(acCode), JSON.stringify(doc), 'utf-8');
+  await atomicWriteJson(docPath(acCode), doc, { serialize: true });
 }
 
+let isEvicting = false;
+
 async function evict(): Promise<void> {
+  if (isEvicting) return;
+  isEvicting = true;
   try {
     const files = await readdir(CACHE_DIR);
     if (files.length <= MAX_ENTRIES) return;
@@ -62,5 +70,7 @@ async function evict(): Promise<void> {
     entries.sort((a, b) => a.mtime - b.mtime);
     const toRemove = entries.slice(0, entries.length - MAX_ENTRIES);
     await Promise.all(toRemove.map(e => unlink(e.path)));
-  } catch { /* best effort */ }
+  } catch { /* best effort */ } finally {
+    isEvicting = false;
+  }
 }

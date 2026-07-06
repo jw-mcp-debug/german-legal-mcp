@@ -7,6 +7,22 @@ const BASE = 'https://recht.nrw.de';
 const SEARCH = `${BASE}/search-middleware/opensearch_internet/_search`;
 const turndown = new TurndownService({ headingStyle: 'atx' });
 
+interface SearchHit {
+  _id?: string;
+  _source?: {
+    url?: string[];
+    field_abbreviation?: string[];
+    field_long_title?: string[];
+    field_document_type_name?: string[];
+  };
+}
+
+interface SearchResponse {
+  hits?: {
+    hits?: SearchHit[];
+  };
+}
+
 function nodeId(id: string): string {
   return `entity:node/${id}:de`;
 }
@@ -14,7 +30,7 @@ function nodeId(id: string): string {
 async function resolveUrl(id: string): Promise<string> {
   // Numeric ID → look up URL slug via OpenSearch
   if (/^\d+$/.test(id)) {
-    const resp = await axios.post(SEARCH, {
+    const resp = await axios.post<SearchResponse>(SEARCH, {
       query: { term: { _id: nodeId(id) } }, size: 1, _source: ['url'],
     });
     const url = resp.data.hits?.hits?.[0]?._source?.url?.[0];
@@ -28,7 +44,7 @@ export class NRWAdapter implements LegisAdapter {
   readonly states = ['NW'] as const;
 
   async search(_state: string, query: string, limit: number): Promise<SearchResult[]> {
-    const resp = await axios.post(SEARCH, {
+    const resp = await axios.post<SearchResponse>(SEARCH, {
       query: {
         bool: {
           must: [{ query_string: { query, default_operator: 'AND' } }],
@@ -42,8 +58,8 @@ export class NRWAdapter implements LegisAdapter {
       _source: ['url', 'field_abbreviation', 'field_long_title', 'field_document_type_name'],
     });
 
-    return (resp.data.hits?.hits || []).map((h: any) => {
-      const s = h._source;
+    return ((resp.data.hits?.hits || []) as SearchHit[]).map((h) => {
+      const s = h._source ?? {};
       const nid = h._id?.match(/node\/(\d+)/)?.[1] || '';
       return {
         id: nid,
@@ -57,7 +73,7 @@ export class NRWAdapter implements LegisAdapter {
   async get(_state: string, id: string): Promise<LegisEntry> {
     const path = await resolveUrl(id);
     const url = `${BASE}${path}`;
-    const resp = await axios.get(url, { maxRedirects: 5 });
+    const resp = await axios.get<string>(url, { maxRedirects: 5 });
     const $ = load(resp.data);
 
     const title = $('title').text().replace(/\s*\|\s*RECHT\.NRW\.DE$/, '').replace(/^\d{2}\.\d{2}\.\d{4}\s+/, '').trim();
@@ -81,7 +97,16 @@ export class NRWAdapter implements LegisAdapter {
     const query = /^\d+$/.test(id)
       ? { term: { _id: nodeId(id) } }
       : { bool: { filter: [{ term: { url: `/lrgv/${id}` } }] } };
-    const resp = await axios.post(SEARCH, {
+    const resp = await axios.post<{
+      hits?: {
+        hits?: Array<{
+          _source?: {
+            field_body_field_num?: string[];
+            field_body_field_headline?: string[];
+          };
+        }>;
+      };
+    }>(SEARCH, {
       query, size: 1, _source: ['field_body_field_num', 'field_body_field_headline'],
     });
 

@@ -1,15 +1,19 @@
-const tenantKey = process.env.GLMCP_NAUTOS_TENANT_KEY ?? '';
-const username = process.env.GLMCP_NAUTOS_USERNAME ?? '';
-const password = process.env.GLMCP_NAUTOS_PASSWORD ?? '';
+import { readBooleanEnv, readStringEnv } from '../../config.js';
+
+const tenantKey = readStringEnv('GLMCP_NAUTOS_TENANT_KEY') ?? '';
+const username = readStringEnv('GLMCP_NAUTOS_USERNAME') ?? '';
+const password = readStringEnv('GLMCP_NAUTOS_PASSWORD') ?? '';
 const hasIpAuth = !!tenantKey;
 const hasUserAuth = !!(username && password);
-const explicitEnabled = process.env.GLMCP_NAUTOS_ENABLED;
+const explicitEnabled = readStringEnv('GLMCP_NAUTOS_ENABLED');
 
 export const nautosConfig = {
   baseUrl: 'https://nautos.de',
   tenantKey,
-  tenantId: process.env.GLMCP_NAUTOS_TENANT_ID ?? '',
+  tenantId: readStringEnv('GLMCP_NAUTOS_TENANT_ID') ?? '',
   username,
   password,
-  enabled: explicitEnabled !== undefined ? explicitEnabled === 'true' : (hasIpAuth || hasUserAuth),
+  enabled: explicitEnabled !== undefined
+    ? readBooleanEnv('GLMCP_NAUTOS_ENABLED', false)
+    : (hasIpAuth || hasUserAuth),
 };

@@ -13,7 +13,7 @@ export class BrandenburgAdapter implements LegisAdapter {
     const page = await axios.get(`${BASE}/de/vorschriften_schnellsuche`);
     const cookies = page.headers['set-cookie']?.map((c: string) => c.split(';')[0]).join('; ');
 
-    const resp = await axios.post(
+    const resp = await axios.post<string>(
       `${BASE}/de/vorschriften_schnellsuche`,
       `search%5Bsearchterm%5D=${encodeURIComponent(query)}&search%5Bart_vorschrift%5D=alle&suchen=Suchen`,
       {
@@ -41,7 +41,7 @@ export class BrandenburgAdapter implements LegisAdapter {
   }
 
   async get(_state: string, id: string): Promise<LegisEntry> {
-    const resp = await axios.get(`${BASE}/${id}`);
+    const resp = await axios.get<string>(`${BASE}/${id}`);
     const $ = load(resp.data);
 
     const title = $('title').text().trim();

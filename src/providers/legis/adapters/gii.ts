@@ -1,3 +1,4 @@
+import { HTTP_USER_AGENT } from '../../../config.js';
 import { giiGetLegislation } from '../../../shared/clients/gii.js';
 import type { LegisAdapter, SearchResult, LegisEntry, TocEntry } from '../types.js';
 import axios from 'axios';
@@ -42,7 +43,7 @@ export class GiiAdapter implements LegisAdapter {
     const law = id.toLowerCase();
     const resp = await axios.get(`${BASE_URL}/${law}/index.html`, {
       responseType: 'arraybuffer',
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; German-Legal-MCP/1.0)' },
+      headers: { 'User-Agent': HTTP_USER_AGENT },
     });
     const html = Buffer.from(resp.data).toString('latin1');
     const $ = load(html);
@@ -66,7 +67,7 @@ export class GiiAdapter implements LegisAdapter {
           pendingStruct = text;
         } else if (pendingStruct) {
           const kw = pendingStruct.match(/\b(Buch|Abschnitt|Kapitel|Titel|Untertitel|Unterkapitel)\b/);
-          lastStructDepth = kw ? (STRUCT_DEPTH[kw[1]] ?? 1) : 1;
+          lastStructDepth = kw?.[1] ? (STRUCT_DEPTH[kw[1]] ?? 1) : 1;
           entries.push({ depth: lastStructDepth, num: pendingStruct, title: text });
           pendingStruct = null;
         } else {

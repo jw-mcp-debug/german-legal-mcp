@@ -1,5 +1,4 @@
-import { writeFileSync, mkdirSync } from 'fs';
-import { dirname } from 'path';
+import { saveToFile } from '../../../shared/save-to-file.js';
 import type { NautosClient, TocSection } from '../client.js';
 import type { ToolResult } from '../../../shared/types.js';
 import * as cache from '../cache.js';
@@ -39,7 +38,9 @@ function formatOutline(doc: cache.CachedDocument): string {
 
 async function fetchAllSections(client: NautosClient, doc: cache.CachedDocument): Promise<string> {
   const allIds = flattenSectionIds(doc.toc);
-  const parts: string[] = [formatOutline(doc).split('## Inhaltsverzeichnis')[0].trim()];
+  const parts: string[] = [
+    formatOutline(doc).split('## Inhaltsverzeichnis')[0]?.trim() ?? '',
+  ];
   for (const id of allIds) {
     if (doc.sections[id]) { parts.push(doc.sections[id]); continue; }
     const html = await client.getSection(doc.din21Id, id);
@@ -96,9 +97,7 @@ export async function handleGetDocument(client: NautosClient, args: Record<strin
   // Save full document
   if (save_path) {
     const full = await fetchAllSections(client, doc);
-    mkdirSync(dirname(save_path), { recursive: true });
-    writeFileSync(save_path, full, 'utf-8');
-    return { content: [{ type: 'text', text: `Saved ${doc.detail.documentNumber} to ${save_path} (${full.length} chars, ${flattenSectionIds(doc.toc).length} sections)` }] };
+    return saveToFile(save_path, full, `${doc.detail.documentNumber} (${flattenSectionIds(doc.toc).length} sections)`);
   }
 
   return { content: [{ type: 'text', text: formatOutline(doc) }] };

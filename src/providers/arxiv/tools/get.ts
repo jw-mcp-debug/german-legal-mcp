@@ -1,5 +1,4 @@
-import { writeFileSync, mkdirSync } from 'fs';
-import { dirname } from 'path';
+import { saveToFile } from '../../../shared/save-to-file.js';
 import type { ArxivClient } from '../client.js';
 import type { ToolResult } from '../../../shared/types.js';
 import { htmlToMarkdown } from '../converter.js';
@@ -12,7 +11,10 @@ export async function handleGet(client: ArxivClient, args: Record<string, unknow
   const { entries } = await client.search({ id_list: id, max_results: 1 });
   if (!entries.length) return { content: [{ type: 'text', text: `Paper ${id} not found.` }], isError: true };
 
-  const entry = entries[0];
+  const entry = entries.at(0);
+  if (entry === undefined) {
+    return { content: [{ type: 'text', text: `Paper ${id} not found.` }], isError: true };
+  }
   const header = [
     `# ${entry.title}`,
     `\n**Autoren:** ${entry.authors.join(', ')}`,
@@ -36,10 +38,13 @@ export async function handleGet(client: ArxivClient, args: Record<string, unknow
   const markdown = `${header}\n\n---\n\n${htmlToMarkdown(html)}`;
 
   if (save_path) {
-    mkdirSync(dirname(save_path), { recursive: true });
-    writeFileSync(save_path, markdown, 'utf-8');
-    return { content: [{ type: 'text', text: `Saved to ${save_path} (${markdown.length} chars)` }] };
+    return saveToFile(save_path, markdown);
   }
 
-  return { content: [{ type: 'text', text: extractSection(markdown, section!) }] };
+  return {
+    content: [{
+      type: 'text',
+      text: extractSection(markdown, section ?? ''),
+    }],
+  };
 }

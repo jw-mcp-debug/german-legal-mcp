@@ -10,12 +10,12 @@ export class SachsenAdapter implements LegisAdapter {
   readonly states = ['SN'] as const;
 
   async search(_state: string, query: string, limit: number): Promise<SearchResult[]> {
-    const page = await axios.get(`${BASE}/vorschriftensuche`);
+    const page = await axios.get<string>(`${BASE}/vorschriftensuche`);
     const cookies = page.headers['set-cookie']?.map((c: string) => c.split(';')[0]).join('; ');
     const $ = load(page.data);
     const token = $('input[name=authenticity_token]').first().val();
 
-    const resp = await axios.post(
+    const resp = await axios.post<string>(
       `${BASE}/suche`,
       `authenticity_token=${encodeURIComponent(String(token))}&search_request%5Bsearch_text%5D=${encodeURIComponent(query)}&search_request%5Bmode%5D=fullsearch&search_request%5Btitle_search%5D=1`,
       {
@@ -38,7 +38,7 @@ export class SachsenAdapter implements LegisAdapter {
   }
 
   async get(_state: string, id: string): Promise<LegisEntry> {
-    const resp = await axios.get(`${BASE}/vorschrift/${id}`);
+    const resp = await axios.get<string>(`${BASE}/vorschrift/${id}`);
     const $ = load(resp.data);
 
     const title = $('h1').first().text().trim();

@@ -1,3 +1,4 @@
+import { HTTP_USER_AGENT } from '../../config.js';
 import axios from 'axios';
 import * as cheerio from 'cheerio';
 import TurndownService from 'turndown';
@@ -35,7 +36,7 @@ export async function giiGetLegislation(law: string, section: string): Promise<G
 
   try {
     const response = await axios.get(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; German-Legal-MCP/1.0)' },
+      headers: { 'User-Agent': HTTP_USER_AGENT },
       responseType: 'arraybuffer',
     });
 

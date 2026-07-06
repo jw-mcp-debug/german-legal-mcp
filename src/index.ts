@@ -6,41 +6,37 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { z } from 'zod';
-import { Provider, ToolResult } from "./shared/types.js";
 import { BaseError, wrapAxiosError } from "./shared/errors.js";
-import { readFileSync, readdirSync } from 'fs';
+import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { rootLogger } from './shared/logger.js';
+import { ConfigurationError, redactEnvironment } from './config.js';
+import { PROVIDER_MANIFEST } from './provider-manifest.js';
+import { ProviderRegistry } from './provider-registry.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+// Single source of truth for package metadata
+const pkg = JSON.parse(readFileSync(join(__dirname, '../package.json'), 'utf-8'));
+
 // Handle --version flag
 if (process.argv.includes('--version') || process.argv.includes('-v')) {
-  const packageJson = JSON.parse(readFileSync(join(__dirname, '../package.json'), 'utf-8'));
-  console.log(packageJson.version);
+  console.log(pkg.version);
   process.exit(0);
 }
 
 // Handle --help flag
 if (process.argv.includes('--help') || process.argv.includes('-h')) {
-  const pkg = JSON.parse(readFileSync(join(__dirname, '../package.json'), 'utf-8'));
-
-  // Load providers to list tools
-  const helpTools: { name: string; description: string }[] = [];
-  const providersDir = join(__dirname, 'providers');
-  for (const entry of readdirSync(providersDir, { withFileTypes: true })) {
-    if (!entry.isDirectory()) continue;
-    try {
-      const mod = await import(`./providers/${entry.name}/index.js`);
-      if (typeof mod.createProvider === 'function') {
-        const provider = mod.createProvider() as Provider | null;
-        if (provider) for (const t of provider.getTools()) helpTools.push({ name: t.name, description: t.description });
-      }
-    } catch { /* skip unavailable providers */ }
-  }
+  const helpRegistry = new ProviderRegistry(PROVIDER_MANIFEST);
+  await helpRegistry.load();
+  const helpTools = helpRegistry.getTools().map(({ name, description }) => ({
+    name,
+    description,
+  }));
+  await helpRegistry.shutdown();
 
   const maxName = Math.max(...helpTools.map(t => t.name.length));
   const toolLines = helpTools
@@ -69,65 +65,7 @@ For more information, visit:
   process.exit(0);
 }
 
-// Provider registry
-const providers: Map<string, Provider> = new Map();
-
-async function registerProvider(provider: Provider): Promise<void> {
-  providers.set(provider.name, provider);
-  if (provider.initialize) {
-    await provider.initialize();
-  }
-}
-
-function getAllTools() {
-  return Array.from(providers.values()).flatMap((p) => p.getTools());
-}
-
-async function handleToolCall(
-  toolName: string,
-  args: Record<string, unknown>
-): Promise<ToolResult> {
-  const colonIndex = toolName.indexOf(":");
-  if (colonIndex === -1) {
-    return {
-      content: [{ type: "text", text: `Unknown tool: ${toolName}` }],
-      isError: true,
-    };
-  }
-
-  const prefix = toolName.substring(0, colonIndex);
-  const rest = toolName.substring(colonIndex + 1);
-  
-  let version = 'v1';
-  if (rest.startsWith('v') && rest.includes(':')) {
-    const versionEnd = rest.indexOf(':');
-    version = rest.substring(0, versionEnd);
-  }
-
-  const provider = providers.get(prefix);
-
-  if (!provider) {
-    return {
-      content: [{ type: "text", text: `Unknown tool: ${toolName}` }],
-      isError: true,
-    };
-  }
-
-  if (version !== 'v1') {
-    rootLogger.warn('Non-v1 API version used', { toolName, version });
-  }
-
-  return provider.handleToolCall(toolName, args);
-}
-
-async function shutdownAllProviders(): Promise<void> {
-  for (const provider of providers.values()) {
-    await provider.shutdown();
-  }
-}
-
-// Read version from package.json
-const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf-8'));
+const providerRegistry = new ProviderRegistry(PROVIDER_MANIFEST);
 
 // Create MCP server
 const server = new Server(
@@ -143,7 +81,7 @@ const server = new Server(
 );
 
 server.setRequestHandler(ListToolsRequestSchema, async () => {
-  const tools = getAllTools();
+  const tools = providerRegistry.getTools();
   return {
     tools: tools.map((tool) => ({
       name: tool.name,
@@ -162,7 +100,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const startTime = Date.now();
   
   try {
-    const result = await handleToolCall(name, (args as Record<string, unknown>) || {});
+    const result = await providerRegistry.handleToolCall(
+      name,
+      (args as Record<string, unknown>) || {},
+    );
     const duration = Date.now() - startTime;
     logger.info('Tool call completed', { tool: name, duration });
     
@@ -194,7 +135,7 @@ async function cleanup(signal?: string) {
 
   const shutdownPromise = (async () => {
     try {
-      await shutdownAllProviders();
+      await providerRegistry.shutdown();
       rootLogger.info('Cleanup complete');
     } catch (error) {
       rootLogger.error('Error during cleanup', { error });
@@ -217,22 +158,20 @@ process.on("SIGINT", () => cleanup("SIGINT"));
 process.on("SIGTERM", () => cleanup("SIGTERM"));
 process.stdin.on("close", () => cleanup("stdin close"));
 
-// Dynamic provider loading
-const providersDir = join(__dirname, 'providers');
-for (const entry of readdirSync(providersDir, { withFileTypes: true })) {
-  if (!entry.isDirectory()) continue;
-  try {
-    const mod = await import(`./providers/${entry.name}/index.js`);
-    if (typeof mod.createProvider === 'function') {
-      const provider = mod.createProvider() as Provider | null;
-      if (provider) {
-        await registerProvider(provider);
-        rootLogger.info(`Provider registered: ${provider.name}`);
-      }
-    }
-  } catch (error) {
-    rootLogger.error(`Failed to load provider from ${entry.name}`, { error });
+try {
+  await providerRegistry.load(({ provider, error }) => {
+    rootLogger.error(`Failed to load provider from ${provider}`, { error });
+  });
+  for (const provider of providerRegistry.getProviders()) {
+    rootLogger.info(`Provider registered: ${provider.name}`);
   }
+} catch (error) {
+  if (!(error instanceof ConfigurationError)) throw error;
+  rootLogger.error('Startup configuration validation failed', {
+    issues: error.issues,
+    environment: redactEnvironment(),
+  });
+  throw error;
 }
 
 const transport = new StdioServerTransport();

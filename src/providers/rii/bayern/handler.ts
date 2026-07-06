@@ -3,6 +3,7 @@ import { searchBayern, fetchBayernDecision } from './client.js';
 import { convertBayernDecision } from './converter.js';
 import { extractSection } from '../../../shared/extract-section.js';
 import { validateConversion } from '../../../shared/converter.js';
+import { saveToFile } from '../../../shared/save-to-file.js';
 
 export async function handleBayernSearch(args: Record<string, unknown>): Promise<ToolResult> {
   const { query, limit = 10 } = args as { query: string; limit?: number };
@@ -37,11 +38,7 @@ export async function handleBayernGetDecision(args: Record<string, unknown>): Pr
   const markdown = `${header}\n\n---\n\n${d.content}`;
 
   if (save_path) {
-    const { writeFileSync, mkdirSync } = await import('fs');
-    const { dirname } = await import('path');
-    mkdirSync(dirname(save_path), { recursive: true });
-    writeFileSync(save_path, markdown, 'utf-8');
-    return { content: [{ type: 'text', text: `Saved to ${save_path} (${markdown.length} chars)\n\nGericht: ${d.court}\nDatum: ${d.date}\nAz: ${d.fileNumber}` }] };
+    return saveToFile(save_path, markdown, `Gericht: ${d.court}\nDatum: ${d.date}\nAz: ${d.fileNumber}`);
   }
 
   if (section) {

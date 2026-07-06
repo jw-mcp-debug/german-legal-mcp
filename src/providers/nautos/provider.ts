@@ -6,7 +6,8 @@ import { handleGetDocument } from './tools/get-document.js';
 
 export class NautosProvider implements Provider {
   readonly name = 'nautos';
-  private client = new NautosClient();
+
+  constructor(private readonly client: NautosClient = new NautosClient()) {}
 
   getTools(): ToolDefinition[] { return nautosTools; }
 

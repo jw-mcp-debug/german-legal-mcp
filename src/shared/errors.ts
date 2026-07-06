@@ -1,9 +1,11 @@
+import axios from 'axios';
+
 export abstract class BaseError extends Error {
   abstract readonly code: string;
   abstract readonly userMessage: string;
   abstract readonly recoveryHint?: string;
 
-  constructor(message: string, public readonly cause?: Error) {
+  constructor(message: string, public override readonly cause?: Error) {
     super(message);
     this.name = this.constructor.name;
     Error.captureStackTrace(this, this.constructor);
@@ -20,7 +22,7 @@ export abstract class BaseError extends Error {
     };
   }
 
-  toString(): string {
+  override toString(): string {
     let msg = `${this.userMessage}\n\nError Code: ${this.code}`;
     if (this.recoveryHint) {
       msg += `\n\nHow to fix: ${this.recoveryHint}`;
@@ -33,15 +35,15 @@ export abstract class BaseError extends Error {
 }
 
 export class RecoverableError extends BaseError {
-  readonly code: string = 'RECOVERABLE_ERROR';
-  readonly userMessage: string = 'A temporary error occurred. Please try again.';
-  readonly recoveryHint?: string = 'Retry the operation after a short delay.';
+  override readonly code: string = 'RECOVERABLE_ERROR';
+  override readonly userMessage: string = 'A temporary error occurred. Please try again.';
+  override readonly recoveryHint?: string = 'Retry the operation after a short delay.';
 }
 
 export class PermanentError extends BaseError {
-  readonly code: string = 'PERMANENT_ERROR';
-  readonly userMessage: string = 'This operation cannot be completed.';
-  readonly recoveryHint?: string = 'Check your input and try a different approach.';
+  override readonly code: string = 'PERMANENT_ERROR';
+  override readonly userMessage: string = 'This operation cannot be completed.';
+  override readonly recoveryHint?: string = 'Check your input and try a different approach.';
 }
 
 export class RateLimitError extends BaseError {
@@ -56,15 +58,15 @@ export class RateLimitError extends BaseError {
 }
 
 export class NetworkError extends RecoverableError {
-  readonly code: string = 'NETWORK_ERROR';
-  readonly userMessage: string = 'Network request failed.';
-  readonly recoveryHint: string = 'Check your internet connection and retry.';
+  override readonly code: string = 'NETWORK_ERROR';
+  override readonly userMessage: string = 'Network request failed.';
+  override readonly recoveryHint: string = 'Check your internet connection and retry.';
 }
 
 /** Convert AxiosError to a BaseError subclass */
 export function wrapAxiosError(error: unknown): BaseError | null {
-  if (!(error instanceof Error) || !('isAxiosError' in error)) return null;
-  const axErr = error as Error & { code?: string; response?: { status: number; statusText: string } };
+  if (!axios.isAxiosError(error)) return null;
+  const axErr = error;
   const code = axErr.code ?? '';
   // Network-level failures (no response)
   if (!axErr.response) {
@@ -84,14 +86,14 @@ export function wrapAxiosError(error: unknown): BaseError | null {
 }
 
 export class AuthenticationError extends PermanentError {
-  readonly code: string = 'AUTHENTICATION_FAILED';
-  readonly userMessage: string = 'Authentication failed. Check your credentials.';
-  readonly recoveryHint: string = 'Verify credentials are correct.';
+  override readonly code: string = 'AUTHENTICATION_FAILED';
+  override readonly userMessage: string = 'Authentication failed. Check your credentials.';
+  override readonly recoveryHint: string = 'Verify credentials are correct.';
 }
 
 export class ValidationError extends PermanentError {
-  readonly code: string = 'VALIDATION_ERROR';
-  readonly userMessage: string = 'Invalid input provided.';
+  override readonly code: string = 'VALIDATION_ERROR';
+  override readonly userMessage: string = 'Invalid input provided.';
   declare readonly recoveryHint: string;
   
   constructor(message: string, public readonly field?: string, cause?: Error) {
@@ -101,54 +103,26 @@ export class ValidationError extends PermanentError {
 }
 
 export class CacheError extends RecoverableError {
-  readonly code: string = 'CACHE_ERROR';
-  readonly userMessage: string = 'Cache operation failed.';
-  readonly recoveryHint: string = 'The operation will continue without cache.';
+  override readonly code: string = 'CACHE_ERROR';
+  override readonly userMessage: string = 'Cache operation failed.';
+  override readonly recoveryHint: string = 'The operation will continue without cache.';
 }
 
 export class BrowserError extends RecoverableError {
-  readonly code: string = 'BROWSER_ERROR';
-  readonly userMessage: string = 'Browser operation failed.';
-  readonly recoveryHint: string = 'Restart the MCP server to reinitialize the browser.';
+  override readonly code: string = 'BROWSER_ERROR';
+  override readonly userMessage: string = 'Browser operation failed.';
+  override readonly recoveryHint: string = 'Restart the MCP server to reinitialize the browser.';
 }
 
-export class WorkstationDeniedError extends PermanentError {
-  readonly code: string = 'WORKSTATION_DENIED';
-  readonly userMessage: string = 'Access denied from this workstation/IP address.';
-  readonly recoveryHint: string = 'Your Beck Online subscription requires access from a specific IP range (e.g., campus network). Please connect to the correct network (VPN if needed) and try again.';
-}
-
-export interface ParallelCitation {
-  label: string;
-  vpath: string;
-}
-
-export class NotIncludedError extends PermanentError {
-  readonly code: string = 'NOT_INCLUDED';
-  readonly userMessage: string = 'Document not included in your Beck Online subscription.';
-  readonly recoveryHint: string = 'Try one of the parallel citations listed below.';
-
-  constructor(message: string, public readonly citations: ParallelCitation[]) {
-    super(message);
-  }
-
-  toJSON() {
-    return { ...super.toJSON(), citations: this.citations };
-  }
-}
-
-export interface AmbiguityOption { label: string; domain: string }
-
-export class AmbiguityError extends PermanentError {
-  readonly code: string = 'AMBIGUOUS';
-  readonly userMessage: string = 'Search was ambiguous. Please select one of the options below.';
-  readonly recoveryHint: string = 'Retry with a more specific query, e.g. include the state abbreviation.';
-
-  constructor(message: string, public readonly options: AmbiguityOption[]) {
-    super(message);
-  }
-
-  toJSON() {
-    return { ...super.toJSON(), options: this.options };
-  }
+/**
+ * A transient, mechanical browser fault — a detached frame, destroyed execution
+ * context, or a closed target/session/protocol error. These are recovered
+ * automatically inside the daemon (relaunch the browser and retry the
+ * idempotent navigation); this class is only surfaced when that bounded retry is
+ * exhausted, so the caller can simply retry rather than treat it as fatal.
+ */
+export class TransientBrowserError extends BrowserError {
+  override readonly code: string = 'TRANSIENT_BROWSER_FAULT';
+  override readonly userMessage: string = 'A transient browser fault occurred (the page was torn down mid-operation).';
+  override readonly recoveryHint: string = 'This is retried automatically; if it persists, simply retry the request.';
 }

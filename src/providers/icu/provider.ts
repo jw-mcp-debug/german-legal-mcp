@@ -1,8 +1,10 @@
 import axios from 'axios';
+import type { AxiosInstance } from 'axios';
 import { Provider, ToolDefinition, ToolResult } from '../../shared/types.js';
 import { rootLogger } from '../../shared/logger.js';
 import { IcuConverter } from './converter.js';
 import { validateConversion } from '../../shared/converter.js';
+import { saveToFile } from '../../shared/save-to-file.js';
 import { icuTools } from './tools/index.js';
 
 const logger = rootLogger.child({ module: 'icu-provider' });
@@ -17,11 +19,11 @@ const HEADERS = {
 
 export class IcuProvider implements Provider {
   readonly name = 'icu';
-  private converter: IcuConverter;
 
-  constructor() {
-    this.converter = new IcuConverter();
-  }
+  constructor(
+    private readonly http: Pick<AxiosInstance, 'get' | 'post'> = axios,
+    private readonly converter: IcuConverter = new IcuConverter(),
+  ) {}
 
   getTools(): ToolDefinition[] {
     return icuTools;
@@ -42,7 +44,7 @@ export class IcuProvider implements Provider {
 
     logger.info('Searching InfoCuria', { query, language });
 
-    const response = await axios.post(SEARCH_URL, {
+    const response = await this.http.post(SEARCH_URL, {
       searchTerm: query,
       multiSearchTerms: [],
       sortTermList: [{ sortDirection: 'DESC', sortTerm: 'ALL_DATES' }],
@@ -57,7 +59,7 @@ export class IcuProvider implements Provider {
 
     const hits = response.data.searchHits || [];
     const markdown = hits.map((hit: Record<string, Record<string, string>>, i: number) => {
-      const c = hit.content;
+      const c = hit.content ?? {};
       return `${i + 1}. **${c.docType}, ${c.docDate}, ${c.idPublished}**\n` +
         `   - ECLI: ${c.ecli || 'n/a'}\n` +
         `   - CELEX: \`${c.celex}\`\n` +
@@ -84,7 +86,7 @@ export class IcuProvider implements Provider {
     const numericId = logicDocId.replace('id_', '');
     logger.info('Fetching document', { case_id, numericId, language });
 
-    const response = await axios.get(`${BLOB_URL}/${numericId}/${language.toUpperCase()}/html`, {
+    const response = await this.http.get<string>(`${BLOB_URL}/${numericId}/${language.toUpperCase()}/html`, {
       headers: { 'Origin': 'https://infocuria.curia.europa.eu' },
       responseType: 'text',
     });
@@ -104,9 +106,7 @@ export class IcuProvider implements Provider {
     const fullDoc = `# ${case_id}\n\n---\n\n${markdown}`;
 
     if (save_path) {
-      const { writeFile } = await import('fs/promises');
-      await writeFile(save_path, fullDoc, 'utf-8');
-      return { content: [{ type: 'text', text: `Saved to ${save_path}\n\nCase: ${case_id}\nLanguage: ${language}` }] };
+      return saveToFile(save_path, fullDoc, `Case: ${case_id}\nLanguage: ${language}`);
     }
 
     return { content: [{ type: 'text', text: fullDoc }] };
@@ -140,10 +140,11 @@ export class IcuProvider implements Provider {
       body.publishedId = caseId;
     }
 
-    const response = await axios.post(SEARCH_URL, body, { headers: HEADERS });
+    const response = await this.http.post(SEARCH_URL, body, { headers: HEADERS });
     const hits = response.data.searchHits || [];
-    if (hits.length === 0) return null;
-    return hits[0].content.logicDocId || null;
+    const first = hits.at(0);
+    if (first === undefined) return null;
+    return first.content?.logicDocId || null;
   }
 
   private extractSection(markdown: string, section: string): string | null {
@@ -152,22 +153,22 @@ export class IcuProvider implements Provider {
     // lines:100-200
     const lineMatch = section.match(/^lines?:(\d+)-(\d+)$/i);
     if (lineMatch) {
-      const start = Math.max(1, parseInt(lineMatch[1])) - 1;
-      const end = Math.min(lines.length, parseInt(lineMatch[2]));
+      const start = Math.max(1, Number.parseInt(lineMatch[1] ?? '1')) - 1;
+      const end = Math.min(lines.length, Number.parseInt(lineMatch[2] ?? '1'));
       return lines.slice(start, end).join('\n');
     }
 
     // Rn 5 or Rn 5-12
     const rnMatch = section.match(/^Rn\.?\s*(\d+)(?:\s*[-–]\s*(\d+))?$/i);
     if (rnMatch) {
-      const rnStart = parseInt(rnMatch[1]);
-      const rnEnd = rnMatch[2] ? parseInt(rnMatch[2]) : rnStart;
+      const rnStart = Number.parseInt(rnMatch[1] ?? '0');
+      const rnEnd = rnMatch[2] ? Number.parseInt(rnMatch[2]) : rnStart;
       let startIdx = -1;
       let endIdx = lines.length;
       for (let i = 0; i < lines.length; i++) {
-        const m = lines[i].match(/^\[Rn\.\s*(\d+)\]\{\.rn\}/);
+        const m = lines[i]?.match(/^\[Rn\.\s*(\d+)\]\{\.rn\}/);
         if (!m) continue;
-        const rn = parseInt(m[1]);
+        const rn = Number.parseInt(m[1] ?? '0');
         if (rn === rnStart && startIdx === -1) startIdx = i;
         if (rn > rnEnd && startIdx !== -1) { endIdx = i; break; }
       }
@@ -180,10 +181,10 @@ export class IcuProvider implements Provider {
     let startIdx = -1;
     let startLevel = 0;
     for (let i = 0; i < lines.length; i++) {
-      const hm = lines[i].match(/^(#{1,6})\s+(.+)/);
+      const hm = lines[i]?.match(/^(#{1,6})\s+(.+)/);
       if (!hm) continue;
-      const level = hm[1].length;
-      const text = hm[2].toLowerCase();
+      const level = hm[1]?.length ?? 0;
+      const text = hm[2]?.toLowerCase() ?? '';
       if (startIdx === -1) {
         if (text.includes(q)) { startIdx = i; startLevel = level; }
       } else if (level <= startLevel) {
@@ -194,4 +195,3 @@ export class IcuProvider implements Provider {
     return null;
   }
 }
-

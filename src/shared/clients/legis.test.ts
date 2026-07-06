@@ -10,6 +10,7 @@ vi.mock('axios', () => ({
 
 vi.mock('fs/promises', () => ({
   writeFile: vi.fn().mockResolvedValue(undefined),
+  mkdir: vi.fn().mockResolvedValue(undefined),
 }));
 
 import axios from 'axios';

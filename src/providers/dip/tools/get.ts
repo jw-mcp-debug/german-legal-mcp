@@ -1,5 +1,4 @@
-import { writeFileSync, mkdirSync } from 'fs';
-import { dirname } from 'path';
+import { saveToFile } from '../../../shared/save-to-file.js';
 import type { DipClient } from '../client.js';
 import type { ToolResult } from '../../../shared/types.js';
 import { extractSection } from '../../../shared/extract-section.js';
@@ -15,14 +14,18 @@ export async function handleGet(client: DipClient, args: Record<string, unknown>
     return { content: [{ type: 'text', text: `Drucksache ${dokumentnummer} not found.` }], isError: true };
   }
 
-  const doc = result.documents[0];
+  const doc = result.documents.at(0);
+  if (doc === undefined) {
+    return {
+      content: [{ type: 'text', text: `Drucksache ${dokumentnummer} not found.` }],
+      isError: true,
+    };
+  }
   const fullText = doc.text ?? '';
   const header = `# BT-Drs. ${doc.dokumentnummer}\n\n**${doc.titel.replace(/\r\n/g, ' ').trim()}**\nDatum: ${doc.datum}\n${doc.fundstelle?.pdf_url ? `PDF: ${doc.fundstelle.pdf_url}` : ''}\n\n---\n\n`;
 
   if (save_path) {
-    mkdirSync(dirname(save_path), { recursive: true });
-    writeFileSync(save_path, header + fullText, 'utf-8');
-    return { content: [{ type: 'text', text: `Saved to ${save_path} (${fullText.length} chars)` }] };
+    return saveToFile(save_path, header + fullText);
   }
 
   if (section) {

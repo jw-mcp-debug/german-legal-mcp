@@ -29,7 +29,7 @@ export function validateSearchQuery(query: unknown): string {
     return SearchQuerySchema.parse(query);
   } catch (error) {
     if (error instanceof z.ZodError) {
-      throw new ValidationError(error.issues[0].message, 'query');
+      throw new ValidationError(error.issues[0]?.message ?? 'Invalid query', 'query');
     }
     throw error;
   }
@@ -44,7 +44,7 @@ export function validateSection(section: unknown): string {
     return SectionSchema.parse(section);
   } catch (error) {
     if (error instanceof z.ZodError) {
-      throw new ValidationError(error.issues[0].message, 'section');
+      throw new ValidationError(error.issues[0]?.message ?? 'Invalid section', 'section');
     }
     throw error;
   }

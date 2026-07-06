@@ -1,5 +1,12 @@
-import { Provider, ToolDefinition, ToolResult } from '../../shared/types.js';
+import type {
+  Provider,
+  ProviderFactory,
+  ToolDefinition,
+  ToolResult,
+} from '../../shared/types.js';
+import { readBooleanEnv } from '../../config.js';
 import { rootLogger } from '../../shared/logger.js';
+import { saveToFile } from '../../shared/save-to-file.js';
 import { validateConversion } from '../../shared/converter.js';
 import { invalidateAllSessions, JPORTAL_STATES } from '../../shared/clients/jportal.js';
 import { legisTools } from './tools/index.js';
@@ -15,12 +22,12 @@ import type { LegisAdapter, TocEntry } from './types.js';
 
 const logger = rootLogger.child({ module: 'legis' });
 
-class LegisProvider implements Provider {
+export class LegisProvider implements Provider {
   readonly name = 'legis';
   private adapterMap = new Map<string, LegisAdapter>();
 
-  constructor() {
-    const adapters: LegisAdapter[] = [
+  constructor(adapters?: readonly LegisAdapter[]) {
+    const configuredAdapters = adapters ?? [
       new GiiAdapter(),
       new JPortalAdapter(),
       new NiedersachsenAdapter(),
@@ -30,7 +37,7 @@ class LegisProvider implements Provider {
       new BremenAdapter(),
       new NRWAdapter(),
     ];
-    for (const adapter of adapters) {
+    for (const adapter of configuredAdapters) {
       for (const state of adapter.states) {
         this.adapterMap.set(state, adapter);
       }
@@ -79,9 +86,7 @@ class LegisProvider implements Provider {
     const markdown = `# ${entry.title}\n\n${entry.content}\n\n---\n**Source:** ${entry.url}`;
 
     if (save_path) {
-      const { writeFile } = await import('fs/promises');
-      await writeFile(save_path, markdown, 'utf-8');
-      return { content: [{ type: 'text', text: `Saved to ${save_path}\n\nTitle: ${entry.title}\nURL: ${entry.url}` }] };
+      return saveToFile(save_path, markdown, `Title: ${entry.title}\nURL: ${entry.url}`);
     }
 
     return { content: [{ type: 'text', text: markdown }] };
@@ -103,9 +108,10 @@ class LegisProvider implements Provider {
       for (const line of entry.content.split('\n')) {
         const m = line.match(/^(#{1,6})\s+(.+)/);
         if (!m) continue;
-        const d = m[1].length - 1; // h1→0, h2→1, etc.
-        const nm = m[2].match(/^(§§?\s*\S+|Art\.?\s*\S+)\s*(.*)/);
-        entries.push({ depth: d, num: nm?.[1] || '', title: nm?.[2] || m[2] });
+        const heading = m[2] ?? '';
+        const d = (m[1]?.length ?? 1) - 1; // h1→0, h2→1, etc.
+        const nm = heading.match(/^(§§?\s*\S+|Art\.?\s*\S+)\s*(.*)/);
+        entries.push({ depth: d, num: nm?.[1] || '', title: nm?.[2] || heading });
       }
     }
 
@@ -154,7 +160,7 @@ class LegisProvider implements Provider {
   }
 }
 
-export function createProvider(): Provider | null {
-  if (process.env.GLMCP_LEGIS_ENABLED === 'false') return null;
+export const createProvider: ProviderFactory = () => {
+  if (!readBooleanEnv('GLMCP_LEGIS_ENABLED', true)) return null;
   return new LegisProvider();
-}
+};

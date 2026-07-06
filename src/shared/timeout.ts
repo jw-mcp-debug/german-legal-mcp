@@ -4,7 +4,7 @@ import { BrowserError } from './errors.js';
  * Error thrown when an operation exceeds its timeout.
  */
 export class TimeoutError extends BrowserError {
-  readonly code = 'TIMEOUT_ERROR';
+  override readonly code = 'TIMEOUT_ERROR';
   declare readonly userMessage: string;
   declare readonly recoveryHint: string;
 
@@ -26,12 +26,20 @@ export async function withTimeout<T>(
   timeoutMs: number,
   operation: string
 ): Promise<T> {
+  let timer: ReturnType<typeof globalThis.setTimeout> | undefined;
   const timeoutPromise = new Promise<never>((_, reject) => {
     // eslint-disable-next-line no-undef
-    setTimeout(() => {
+    timer = setTimeout(() => {
       reject(new TimeoutError(operation, timeoutMs));
     }, timeoutMs);
   });
 
-  return Promise.race([promise, timeoutPromise]);
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timer) {
+      // eslint-disable-next-line no-undef
+      clearTimeout(timer);
+    }
+  }
 }

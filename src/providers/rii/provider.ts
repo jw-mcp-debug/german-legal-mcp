@@ -1,9 +1,12 @@
 import axios from 'axios';
+import type { AxiosInstance } from 'axios';
 import * as cheerio from 'cheerio';
 import { Provider, ToolDefinition, ToolResult } from '../../shared/types.js';
 import { rootLogger } from '../../shared/logger.js';
+import { HTTP_USER_AGENT } from '../../config.js';
 import { RiiConverter } from './converter.js';
 import { validateConversion } from '../../shared/converter.js';
+import { saveToFile } from '../../shared/save-to-file.js';
 import { riiTools } from './tools/index.js';
 import { handleBayernSearch, handleBayernGetDecision } from './bayern/handler.js';
 
@@ -13,11 +16,11 @@ const BASE_URL = 'https://www.rechtsprechung-im-internet.de/jportal/portal/page/
 
 export class RiiProvider implements Provider {
   readonly name = 'rii';
-  private converter: RiiConverter;
 
-  constructor() {
-    this.converter = new RiiConverter();
-  }
+  constructor(
+    private readonly http: Pick<AxiosInstance, 'get'> = axios,
+    private readonly converter: RiiConverter = new RiiConverter(),
+  ) {}
 
   getTools(): ToolDefinition[] {
     return riiTools;
@@ -46,7 +49,7 @@ export class RiiProvider implements Provider {
     const url = `${BASE_URL}/js_peid/Suchportlet2/media-type/html`;
     logger.info('Searching', { query });
 
-    const response = await axios.get(url, {
+    const response = await this.http.get<string>(url, {
       params: {
         formhaschangedvalue: 'yes',
         eventSubmit_doSearch: 'suchen',
@@ -55,7 +58,7 @@ export class RiiProvider implements Provider {
         desc: 'text',
         query,
       },
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; German-Legal-MCP/1.0)' },
+      headers: { 'User-Agent': HTTP_USER_AGENT },
     });
 
     const $ = cheerio.load(response.data);
@@ -64,10 +67,11 @@ export class RiiProvider implements Provider {
     $('a.TrefferlisteHervorheben[id^="tlid"]').each((_, el) => {
       const href = $(el).attr('href') || '';
       const docIdMatch = href.match(/doc\.id=([^&]+)/);
+      const docId = docIdMatch?.[1];
       const title = $(el).attr('title') || $(el).text().trim();
-      if (docIdMatch && !$(el).attr('id')?.includes('.')) {
+      if (docId !== undefined && !$(el).attr('id')?.includes('.')) {
         const snippet = $(el).closest('tr').find('.docPreview').text().trim();
-        results.push({ title, docId: docIdMatch[1], snippet });
+        results.push({ title, docId, snippet });
       }
     });
 
@@ -84,9 +88,9 @@ export class RiiProvider implements Provider {
 
     logger.info('Fetching decision', { doc_id, part });
 
-    const response = await axios.get(BASE_URL, {
+    const response = await this.http.get<string>(BASE_URL, {
       params: { 'doc.id': doc_id, 'doc.part': part, showdoccase: '1', paramfromHL: 'true' },
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; German-Legal-MCP/1.0)' },
+      headers: { 'User-Agent': HTTP_USER_AGENT },
     });
 
     const decision = this.converter.extractDecision(response.data);
@@ -94,9 +98,7 @@ export class RiiProvider implements Provider {
     const markdown = `# ${decision.title}\n\n**Court:** ${decision.court}  \n**Date:** ${decision.date}  \n**File Number:** ${decision.fileNumber}  \n**ECLI:** ${decision.ecli}\n\n---\n\n${decision.content}`;
 
     if (save_path) {
-      const { writeFile } = await import('fs/promises');
-      await writeFile(save_path, markdown, 'utf-8');
-      return { content: [{ type: 'text', text: `Saved to ${save_path}\n\nCourt: ${decision.court}\nDate: ${decision.date}\nFile Number: ${decision.fileNumber}\nECLI: ${decision.ecli}` }] };
+      return saveToFile(save_path, markdown, `Court: ${decision.court}\nDate: ${decision.date}\nFile Number: ${decision.fileNumber}\nECLI: ${decision.ecli}`);
     }
 
     return { content: [{ type: 'text', text: markdown }] };

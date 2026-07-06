@@ -17,7 +17,7 @@ td.addRule('note', {
     const label = $('.tr--non-normative-note-label').text().trim();
     const body = $('.tr--note .tr--p').map((_, el) => $(el).text().trim()).get();
     if (label && body.length) {
-      body[0] = body[0].replace(label, '').trim();
+      body[0] = (body[0] ?? '').replace(label, '').trim();
       return `\n\n> **${label}** ${body.join('\n> ')}\n\n`;
     }
     return `\n\n> ${body.join('\n> ')}\n\n`;
@@ -36,7 +36,7 @@ td.addRule('listItem', {
   filter: (node) => node.nodeName === 'DIV' && (node.getAttribute('class') || '').includes('tr--li'),
   replacement: (content, node) => {
     const $ = load((node as unknown as { outerHTML: string }).outerHTML);
-    const label = $(node as unknown as string).children('.tr--label').first().text().trim();
+    const label = $('.tr--label').first().text().trim();
     const body = content.replace(label, '').trim();
     return `\n- ${label} ${body}`;
   },

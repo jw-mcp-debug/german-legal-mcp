@@ -1,3 +1,4 @@
+import { HTTP_USER_AGENT } from '../../../config.js';
 import axios from 'axios';
 import { load } from 'cheerio';
 import TurndownService from 'turndown';
@@ -11,19 +12,19 @@ export class BayernAdapter implements LegisAdapter {
 
   async search(_state: string, query: string, limit: number): Promise<SearchResult[]> {
     // Get CSRF token + cookies
-    const page = await axios.get(`${BASE}/Search`, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+    const page = await axios.get<string>(`${BASE}/Search`, { headers: { 'User-Agent': HTTP_USER_AGENT } });
     const cookies = page.headers['set-cookie']?.map((c: string) => c.split(';')[0]).join('; ');
     const $ = load(page.data);
     const token = $('input[name=__RequestVerificationToken]').val();
 
-    const resp = await axios.post(
+    const resp = await axios.post<string>(
       `${BASE}/Search`,
       `SearchFields.Content=${encodeURIComponent(query)}&__RequestVerificationToken=${encodeURIComponent(String(token))}`,
       {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
           Cookie: cookies || '',
-          'User-Agent': 'Mozilla/5.0',
+          'User-Agent': HTTP_USER_AGENT,
         },
         maxRedirects: 5,
       },
@@ -42,7 +43,7 @@ export class BayernAdapter implements LegisAdapter {
   }
 
   async get(_state: string, id: string): Promise<LegisEntry> {
-    const resp = await axios.get(`${BASE}/Content/Document/${id}`);
+    const resp = await axios.get<string>(`${BASE}/Content/Document/${id}`);
     const $ = load(resp.data);
 
     const title = $('title').text().replace(' - Bürgerservice', '').trim();

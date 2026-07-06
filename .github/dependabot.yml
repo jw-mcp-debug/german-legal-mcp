@@ -1,14 +1,63 @@
 # Dependabot configuration
+# - npm version updates target `develop` (the default branch) explicitly.
+# - Routine minor/patch bumps are GROUPED so a single PR carries the whole
+#   package-lock.json change. This kills the merge-cascade: there is no longer
+#   one PR per package all editing the same lockfile and re-conflicting on merge.
+# - Production and development deps are split into two groups so a dev-tooling
+#   bump can never block a security-relevant prod bump (and vice versa).
+# - Major bumps are intentionally NOT grouped: each lands in its own PR for
+#   manual review and is never eligible for auto-merge.
+# - SHA-pinned GitHub Actions are also kept current via a second ecosystem entry.
 version: 2
 updates:
   - package-ecosystem: "npm"
     directory: "/"
+    target-branch: "develop"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 10
-    reviewers:
-      - "metaneutrons"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Berlin"
+    open-pull-requests-limit: 5
+    versioning-strategy: "increase"
     labels:
       - "dependencies"
     commit-message:
       prefix: "chore(deps)"
+      prefix-development: "chore(dev-deps)"
+      include: "scope"
+    groups:
+      prod-minor-patch:
+        applies-to: version-updates
+        dependency-type: "production"
+        update-types:
+          - "minor"
+          - "patch"
+      dev-minor-patch:
+        applies-to: version-updates
+        dependency-type: "development"
+        update-types:
+          - "minor"
+          - "patch"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    target-branch: "develop"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Berlin"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "ci(deps)"
+      include: "scope"
+    groups:
+      github-actions-minor-patch:
+        applies-to: version-updates
+        update-types:
+          - "minor"
+          - "patch"

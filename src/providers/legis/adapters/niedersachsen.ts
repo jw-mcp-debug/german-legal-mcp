@@ -1,3 +1,4 @@
+import { HTTP_USER_AGENT } from '../../../config.js';
 import axios from 'axios';
 import * as cheerio from 'cheerio';
 import TurndownService from 'turndown';
@@ -13,9 +14,9 @@ export class NiedersachsenAdapter implements LegisAdapter {
 
   async search(_state: string, query: string, limit: number): Promise<SearchResult[]> {
     logger.info('Searching NI-VORIS', { query });
-    const { data } = await axios.get(`${BASE}/search`, {
+    const { data } = await axios.get<string>(`${BASE}/search`, {
       params: { query },
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; German-Legal-MCP/1.0)' },
+      headers: { 'User-Agent': HTTP_USER_AGENT },
     });
 
     const $ = cheerio.load(data);
@@ -32,6 +33,7 @@ export class NiedersachsenAdapter implements LegisAdapter {
           .next('.egal-search-result-item-snippet').text().trim(),
         date: '',
       });
+      return undefined;
     });
 
     return results;
@@ -40,8 +42,8 @@ export class NiedersachsenAdapter implements LegisAdapter {
   async get(_state: string, id: string): Promise<LegisEntry> {
     logger.info('Fetching NI-VORIS document', { id });
     const url = `${BASE}/browse/document/${id}`;
-    const { data } = await axios.get(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; German-Legal-MCP/1.0)' },
+    const { data } = await axios.get<string>(url, {
+      headers: { 'User-Agent': HTTP_USER_AGENT },
     });
 
     const $ = cheerio.load(data);
@@ -63,8 +65,8 @@ export class NiedersachsenAdapter implements LegisAdapter {
   }
 
   async toc(_state: string, id: string): Promise<TocEntry[]> {
-    const { data } = await axios.get(`${BASE}/browse/document/${id}`, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; German-Legal-MCP/1.0)' },
+    const { data } = await axios.get<string>(`${BASE}/browse/document/${id}`, {
+      headers: { 'User-Agent': HTTP_USER_AGENT },
     });
     const $ = cheerio.load(data);
     const entries: TocEntry[] = [];

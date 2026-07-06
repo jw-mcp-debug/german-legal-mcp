@@ -51,43 +51,56 @@ function isExpired(): boolean {
 
 function parseSession(data: Record<string, unknown>): JwtSession {
   const token = data.token as string;
-  const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString());
+  const encodedPayload = token.split('.')[1];
+  if (encodedPayload === undefined) throw new AuthenticationError('Invalid nautos JWT.');
+  const payload = JSON.parse(Buffer.from(encodedPayload, 'base64url').toString()) as {
+    exp?: unknown;
+  };
   return { token, exp: Number(payload.exp), userAccountId: (data.userAccountId as string) ?? '' };
 }
 
+let loginPromise: Promise<JwtSession> | null = null;
+
 async function login(): Promise<JwtSession> {
   if (!isExpired()) return session!;
+  if (loginPromise) return loginPromise;
 
-  const base = `${nautosConfig.baseUrl}/api/authentication`;
+  loginPromise = (async () => {
+    const base = `${nautosConfig.baseUrl}/api/authentication`;
 
-  // Try IP-based auth first (requires tenant key)
-  if (nautosConfig.tenantKey) {
-    try {
-      const { data } = await axios.post(`${base}/${nautosConfig.tenantKey}`, {}, {
-        headers: { 'Content-Type': 'application/json' }, timeout: 15000,
-      });
-      if (data?.token) { session = parseSession(data); return session; }
-    } catch { /* fall through to user-based */ }
-  }
+    // Try IP-based auth first (requires tenant key)
+    if (nautosConfig.tenantKey) {
+      try {
+        const { data } = await axios.post<Record<string, unknown>>(`${base}/${nautosConfig.tenantKey}`, {}, {
+          headers: { 'Content-Type': 'application/json' }, timeout: 15000,
+        });
+        if (data?.token) { session = parseSession(data); return session; }
+      } catch { /* fall through to user-based */ }
+    }
 
-  // Fall back to user-based auth if credentials are configured
-  if (nautosConfig.username && nautosConfig.password) {
-    try {
-      const { data } = await axios.post(base, {
-        username: nautosConfig.username,
-        password: nautosConfig.password,
-        tenantName: nautosConfig.tenantKey,
-      }, { headers: { 'Content-Type': 'application/json' }, timeout: 15000 });
-      if (data?.token) { session = parseSession(data); return session; }
-    } catch { /* fall through to error */ }
-  }
+    // Fall back to user-based auth if credentials are configured
+    if (nautosConfig.username && nautosConfig.password) {
+      try {
+        const { data } = await axios.post<Record<string, unknown>>(base, {
+          username: nautosConfig.username,
+          password: nautosConfig.password,
+          tenantName: nautosConfig.tenantKey,
+        }, { headers: { 'Content-Type': 'application/json' }, timeout: 15000 });
+        if (data?.token) { session = parseSession(data); return session; }
+      } catch { /* fall through to error */ }
+    }
 
-  const hints = [];
-  if (!nautosConfig.tenantKey) hints.push('GLMCP_NAUTOS_TENANT_KEY is required');
-  if (!nautosConfig.username) hints.push('set GLMCP_NAUTOS_USERNAME and GLMCP_NAUTOS_PASSWORD for user-based login');
-  throw new AuthenticationError(
-    `nautos: Authentication failed. ${hints.length ? hints.join('; ') + '.' : 'Check your IP range and credentials.'}`,
-  );
+    const hints = [];
+    if (!nautosConfig.tenantKey) hints.push('GLMCP_NAUTOS_TENANT_KEY is required');
+    if (!nautosConfig.username) hints.push('set GLMCP_NAUTOS_USERNAME and GLMCP_NAUTOS_PASSWORD for user-based login');
+    throw new AuthenticationError(
+      `nautos: Authentication failed. ${hints.length ? hints.join('; ') + '.' : 'Check your IP range and credentials.'}`,
+    );
+  })().finally(() => {
+    loginPromise = null;
+  });
+
+  return loginPromise;
 }
 
 // --- NV Viewer auth cache (in-memory, per din21Id) ---
@@ -102,7 +115,14 @@ function getCachedViewerAuth(din21Id: string): string | null {
 }
 
 function parseJwtExp(jwt: string): number {
-  try { return JSON.parse(Buffer.from(jwt.split('.')[1], 'base64url').toString()).exp ?? 0; }
+  try {
+    const encodedPayload = jwt.split('.')[1];
+    if (encodedPayload === undefined) return 0;
+    const payload = JSON.parse(Buffer.from(encodedPayload, 'base64url').toString()) as {
+      exp?: unknown;
+    };
+    return typeof payload.exp === 'number' ? payload.exp : 0;
+  }
   catch { return 0; }
 }
 
@@ -110,24 +130,30 @@ function parseJwtExp(jwt: string): number {
 function normalizeSections(raw: unknown): TocSection[] {
   if (!raw) return [];
   const arr = Array.isArray(raw) ? raw : [raw];
-  return arr.map((s: Record<string, unknown>) => ({
-    id: s.id as string,
-    label: s.label as string | undefined,
-    title: (s.title as string ?? '').replace(/\n/g, ' '),
-    ...(s.section ? { section: normalizeSections(s.section) } : {}),
-  }));
+  return arr.map((value: unknown) => {
+    const s = value as Record<string, unknown>;
+    const label = typeof s.label === 'string' ? s.label : undefined;
+    return {
+      id: typeof s.id === 'string' ? s.id : '',
+      ...(label === undefined ? {} : { label }),
+      title: (typeof s.title === 'string' ? s.title : '').replace(/\n/g, ' '),
+      ...(s.section ? { section: normalizeSections(s.section) } : {}),
+    };
+  });
 }
 
 // --- Client ---
 
 export class NautosClient {
+  private apiClient = axios.create({
+    baseURL: `${nautosConfig.baseUrl}/api/v1`,
+    timeout: 30000,
+  });
+
   private async api(): Promise<AxiosInstance> {
     const s = await login();
-    return axios.create({
-      baseURL: `${nautosConfig.baseUrl}/api/v1`,
-      headers: { Authorization: `Bearer ${s.token}` },
-      timeout: 30000,
-    });
+    this.apiClient.defaults.headers.common['Authorization'] = `Bearer ${s.token}`;
+    return this.apiClient;
   }
 
   private nv = axios.create({
@@ -176,7 +202,8 @@ export class NautosClient {
         titleDe: data.titleDe ?? '', titleEn: data.titleEn ?? '',
         dateOfIssue: data.dateOfIssue ?? '', valid: data.valid ?? false,
         documentType: data.documentType ?? [], classificationIcs: data.classificationIcs ?? [],
-        din21Id, format,
+        ...(din21Id === undefined ? {} : { din21Id }),
+        ...(format === undefined ? {} : { format }),
       };
     } catch (e) { throw wrapAxiosError(e) ?? e; }
   }
@@ -201,15 +228,24 @@ export class NautosClient {
       const api = await this.api();
       const { data: lockRaw } = await api.get(`/documentaccess/simultaneously/${din21Id}`);
       const lockId = String(lockRaw).replace(/"/g, '');
-      const { data: octaRaw } = await api.get('/octa/token', { params: { din21id: din21Id, lockId } });
-      const octaToken = typeof octaRaw === 'object' ? octaRaw.octaToken : String(octaRaw).match(/:([A-F0-9]{64})/i)?.[1];
+      const { data: octaRaw } = await api.get<unknown>('/octa/token', {
+        params: { din21id: din21Id, lockId },
+      });
+      const octaToken = (
+        typeof octaRaw === 'object'
+        && octaRaw !== null
+        && 'octaToken' in octaRaw
+        && typeof octaRaw.octaToken === 'string'
+      )
+        ? octaRaw.octaToken
+        : String(octaRaw).match(/:([A-F0-9]{64})/i)?.[1];
       if (!octaToken) throw new Error(`Invalid OCTA token format: ${JSON.stringify(octaRaw).slice(0, 80)}`);
-      const { data: authData } = await this.nv.post('/auth/user', {
+      const { data: authData } = await this.nv.post<{ xSHISecurity?: unknown }>('/auth/user', {
         isFullscreen: false, token: octaToken, subuser: '',
         contextid: 'octa', lang: 'de', url: `${nautosConfig.baseUrl}/api/nv/nv-rest/`,
       });
       const xSHI = authData.xSHISecurity;
-      if (!xSHI) throw new Error('No xSHISecurity in NV auth response');
+      if (typeof xSHI !== 'string') throw new Error('No xSHISecurity in NV auth response');
       viewerAuthCache.set(din21Id, { xSHI, exp: parseJwtExp(xSHI) });
       return xSHI;
     } catch (e) { throw wrapAxiosError(e) ?? e; }

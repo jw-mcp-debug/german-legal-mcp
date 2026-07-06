@@ -6,7 +6,8 @@ import { handleGet } from './tools/get.js';
 
 export class ArxivProvider implements Provider {
   readonly name = 'arxiv';
-  private client = new ArxivClient();
+
+  constructor(private readonly client: ArxivClient = new ArxivClient()) {}
 
   getTools(): ToolDefinition[] { return arxivTools; }
 

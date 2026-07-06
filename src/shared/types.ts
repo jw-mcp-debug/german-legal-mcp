@@ -24,6 +24,51 @@ export interface ToolResult {
   isError?: boolean;
 }
 
+/** Standard handler contract shared by providers and provider-local adapters. */
+export type ToolHandler = (
+  toolName: string,
+  args: Record<string, unknown>,
+) => Promise<ToolResult>;
+
+/** Factory contract used by the provider registry and provider entry points. */
+export type ProviderFactory = () => Provider | null;
+
+/** Shape of a dynamically imported provider entry-point module. */
+export interface ProviderModule {
+  createProvider: ProviderFactory;
+}
+
+export type ProviderDistribution = 'public' | 'private';
+
+export interface ProviderCapabilities {
+  readonly browser: boolean;
+  readonly cache: boolean;
+  readonly daemon: boolean;
+  readonly search: boolean;
+  readonly documents: boolean;
+}
+
+export interface ProviderManifestEntry {
+  readonly name: string;
+  readonly description: string;
+  readonly distribution: ProviderDistribution;
+  readonly enablementVariables: readonly string[];
+  readonly capabilities: ProviderCapabilities;
+  readonly load: () => Promise<ProviderModule>;
+}
+
+/** Request-local cache lookup result with explicit attribution. */
+export interface CacheResult<T, TSource extends string = string> {
+  value: T | null;
+  source: TSource | null;
+}
+
+/** Shared status envelope for operational health snapshots. */
+export interface HealthStatus<TStatus extends string = string> {
+  status: TStatus;
+  message: string;
+}
+
 /**
  * Provider interface that all legal data source integrations must implement.
  * Enables clean separation of concerns and easy addition of new providers.
@@ -44,7 +89,7 @@ export interface Provider {
    * @param args - Tool arguments as key-value pairs
    * @returns Promise resolving to the tool result
    */
-  handleToolCall(toolName: string, args: Record<string, unknown>): Promise<ToolResult>;
+  handleToolCall: ToolHandler;
 
   /**
    * Optional initialization logic called during provider registration.

@@ -8,7 +8,8 @@ import { handleSearchPlenarprotokoll } from './tools/plenarprotokoll.js';
 
 export class DipProvider implements Provider {
   readonly name = 'dip';
-  private client = new DipClient();
+
+  constructor(private readonly client: DipClient = new DipClient()) {}
 
   getTools(): ToolDefinition[] { return dipTools; }
 
