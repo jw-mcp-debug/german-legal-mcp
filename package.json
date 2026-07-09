@@ -1,6 +1,6 @@
 {
   "name": "@metaneutrons/german-legal-mcp",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "MCP server for German legal research",
   "main": "dist/index.js",
   "bin": {
@@ -36,6 +36,7 @@
     "test:coverage": "vitest run --coverage",
     "test:package": "node scripts/verify-package.mjs",
     "test:smoke": "node scripts/smoke-startup.mjs",
+    "test:live": "GLMCP_RIS_LIVE=1 vitest run src/providers/ris/ris.live.test.ts",
     "verify": "npm run lint && npm run typecheck && npm run build && npm run test:coverage && npm run test:package && npm run test:smoke && npm audit --omit=dev --audit-level=high",
     "prepare": "husky"
   },

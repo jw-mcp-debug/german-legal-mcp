@@ -69,6 +69,16 @@ export const PROVIDER_MANIFEST: readonly ProviderManifestEntry[] = [
     load: () => loadProvider('rii'),
   },
   {
+    name: 'ris',
+    description: 'Austrian federal law and case law (RIS)',
+    distribution: 'public',
+    enablementVariables: ['GLMCP_RIS_ENABLED'],
+    capabilities: {
+      browser: false, cache: false, daemon: false, search: true, documents: true,
+    },
+    load: () => loadProvider('ris'),
+  },
+  {
     name: 'nautos',
     description: 'Nautos technical standards',
     distribution: 'public',

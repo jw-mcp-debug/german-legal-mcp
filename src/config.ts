@@ -24,6 +24,7 @@ export const ENVIRONMENT_VARIABLES: readonly EnvironmentVariable[] = [
   { name: 'GLMCP_ICU_ENABLED', description: 'Enable the InfoCuria provider.', defaultValue: 'true' },
   { name: 'GLMCP_LEGIS_ENABLED', description: 'Enable the legislation provider.', defaultValue: 'true' },
   { name: 'GLMCP_RII_ENABLED', description: 'Enable the RII provider.', defaultValue: 'true' },
+  { name: 'GLMCP_RIS_ENABLED', description: 'Enable the RIS (Austria) provider.', defaultValue: 'true' },
   { name: 'GLMCP_NAUTOS_ENABLED', description: 'Enable the Nautos provider.' },
   { name: 'GLMCP_NAUTOS_TENANT_KEY', description: 'Nautos tenant key.', secret: true },
   { name: 'GLMCP_NAUTOS_TENANT_ID', description: 'Nautos tenant ID.' },

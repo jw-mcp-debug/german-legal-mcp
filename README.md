@@ -16,6 +16,7 @@ A Model Context Protocol (MCP) server for German legal research, providing unifi
 |--------|--------|--------|----------------|
 | Bundes- & Landesrecht | ✅ Available | `legis:` | None (public) |
 | [Rechtsprechung im Internet](https://www.rechtsprechung-im-internet.de) | ✅ Available | `rii:` | None (public) |
+| [RIS Österreich](https://www.ris.bka.gv.at) | ✅ Available | `ris:` | None (public OGD API) |
 | [InfoCuria (CJEU)](https://infocuria.curia.europa.eu) | ✅ Available | `icu:` | None (public) |
 | [EUR-Lex](https://eur-lex.europa.eu) | ✅ Available | `eul:` | None (public) |
 | [DIP Bundestag](https://dip.bundestag.de) | ✅ Available | `dip:` | Public key included |
@@ -42,6 +43,19 @@ A Model Context Protocol (MCP) server for German legal research, providing unifi
 - **Kurztext/Langtext** — summary or full text via `part` parameter
 - **Randnummern** — formatted as `[Rn. 5]{.rn}` (pandoc spans)
 - **Save to file** — `save_path` parameter to avoid context pollution
+
+### RIS Österreich (`ris:*` tools)
+- **Austrian federal, state & case law** — consolidated Bundesrecht and Landesrecht (all 9 Bundesländer, or filter to one via `bundesland`; results tagged with their Bundesland), plus Judikatur (OGH/OLG/LG via Justiz; VwGH, VfGH, BVwG and others via the `court` filter)
+  - **Note:** `bundesland` on `application="landesrecht"` returns that state's **consolidated law** (LrKons). Case law is a separate application — for raw state judikatur use `application="judikatur"` with the appropriate `court` (e.g. `Lvwg` for a Landesverwaltungsgericht), not `bundesland`.
+- **No authentication** — free public Open Government Data REST API (`data.bka.gv.at/ris/api/v2.6`)
+- **Latest-first** — `sort="date"` for the newest decisions; Judikatur Rechtssätze link their full decision text (Entscheidungstext) for `ris:get`
+- **Navigate & read statutes** — `ris:toc law="ABGB"` lists the §§ with headings; `ris:get_norm law="ABGB" paragraph="1295"` returns a single §
+- **Surgical retrieval** — `ris:get section=…` returns only a Randnummer (`Rn 5`), an Rn range (`Rn 5-9`), a line range (`lines:1-40`), or a heading (`Spruch`) — all token-preserving
+- **Pandoc-compatible Markdown** — Randnummern as `[Rn. 5]{.rn}` spans; document HTML converted with Cheerio + Turndown
+- **Structured metadata** — Geschäftszahl, Entscheidungsdatum, ECLI, issuing court/organ
+- **Save to file** — `save_path` parameter to avoid context pollution
+- ⚠️ **Austrian** law — for German case law use `rii:*`, for German legislation use `legis:*`
+- ✅ Phase 1 + 2 complete: search, sort, surgical Rn/§ retrieval, table of contents, Bundesland filter, decision links across all courts
 
 ### InfoCuria — CJEU (`icu:*` tools)
 - **EU Court of Justice case law** — judgments, opinions, orders from CJEU and General Court
@@ -114,6 +128,7 @@ or add your MCP client config (e.g., `claude_desktop_config.json`):
 | `GLMCP_LOG_LEVEL` | `info` | Structured log level. |
 | `GLMCP_LEGIS_ENABLED` | `true` | Bundes- & Landesrecht |
 | `GLMCP_RII_ENABLED` | `true` | Rechtsprechung im Internet |
+| `GLMCP_RIS_ENABLED` | `true` | RIS Austria (federal law + case law) |
 | `GLMCP_ICU_ENABLED` | `true` | InfoCuria (CJEU) |
 | `GLMCP_EUL_ENABLED` | `true` | EUR-Lex |
 | `GLMCP_DIP_ENABLED` | `true` | DIP Bundestag (auto-disabled after 2027-06-01 without own key) |
@@ -151,6 +166,15 @@ or add your MCP client config (e.g., `claude_desktop_config.json`):
 |------|-------------|
 | `rii:search` | Search for court decisions. Returns list with doc IDs, titles, and snippets. Use `source: "BY"` for Bavarian state courts. |
 | `rii:get_decision` | Retrieve full text of a court decision by doc ID. `part`: K (Kurztext) or L (Langtext, default). Optional `save_path` to save to file. Use `source: "BY"` for gesetze-bayern.de IDs. |
+
+### RIS Österreich
+
+| Tool | Description |
+|------|-------------|
+| `ris:search` | Search the Austrian RIS. `application`: "bundesrecht"/"landesrecht" (consolidated federal/state law) or "judikatur" (case law; set `court`: Justiz/Vwgh/Vfgh/Bvwg). `sort="date"` for the **latest** decisions. Landesrecht results are tagged with their Bundesland (filter to one state's consolidated law with `bundesland`). Judikatur hits are Rechtssätze that link their full decision text (Entscheidungstext) for `ris:get`. |
+| `ris:get` | Retrieve a RIS document as Markdown by `content_url` (from search) or `id` + `applikation`. `section` returns only part — `Rn 5`, `Rn 5-9`, `lines:1-40`, or a heading like `Spruch` — for token-preserving reads. Optional `save_path`. |
+| `ris:get_norm` | Retrieve a single **§** of a consolidated law — `law="ABGB" paragraph="1295"`. `application`: bundesrecht (federal) or landesrecht (+ `bundesland`). The token-preserving way to read one paragraph. |
+| `ris:toc` | Table of contents (Inhaltsverzeichnis) of a consolidated law — its §§ with headings — to navigate before `ris:get_norm`. `law="ABGB"` (full title if an abbreviation fails). `application` + `bundesland` as above. |
 
 ### InfoCuria — CJEU
 
@@ -226,7 +250,7 @@ This repo uses [Conventional Commits](https://www.conventionalcommits.org/) enfo
 
 **Types:** `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `chore`, `ci`, `build`, `revert`
 
-**Scopes:** `legis`, `rii`, `icu`, `eul`, `dip`, `nautos`, `core`, `deps`, `config`
+**Scopes:** `legis`, `rii`, `ris`, `icu`, `eul`, `dip`, `nautos`, `core`, `deps`, `config`
 
 ## Architecture
 
@@ -234,10 +258,10 @@ This repo uses [Conventional Commits](https://www.conventionalcommits.org/) enfo
   distribution use one checked provider manifest
 - **Cheerio + Turndown** for HTML → pandoc Markdown conversion
 - **Zod** for input validation
-- **Axios** for HTTP requests (Legis, RII, InfoCuria, EUR-Lex, DIP, arXiv, nautos)
+- **Axios** for HTTP requests (Legis, RII, RIS, InfoCuria, EUR-Lex, DIP, arXiv, nautos)
 - **Structured JSON errors** — all providers return `BaseError.toJSON()` with `code`, `userMessage`, `recoveryHint`; Axios errors auto-wrapped; DNS failures fail fast
 - **Conversion validation** — all HTML→Markdown providers validate output is non-empty; detects upstream layout changes early
-- Tools namespaced by source (`legis:`, `rii:`, `icu:`, `eul:`, `dip:`, `arxiv:`, `nautos:`)
+- Tools namespaced by source (`legis:`, `rii:`, `ris:`, `icu:`, `eul:`, `dip:`, `arxiv:`, `nautos:`)
 
 ## License
 
