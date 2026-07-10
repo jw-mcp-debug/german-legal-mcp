@@ -116,6 +116,7 @@ The easiest way to use this server in [Claude Desktop](https://claude.ai/downloa
 
 The bundle ships the public, no-authentication sources and is cross-platform (macOS and Windows, Apple Silicon and Intel) — Claude Desktop supplies the Node.js runtime, so a single download works everywhere.
 
+
 ## Quick Start with npx
 
 ```bash
