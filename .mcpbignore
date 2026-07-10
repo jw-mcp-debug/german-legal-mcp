@@ -33,3 +33,6 @@ node_modules/**/examples/
 
 # --- Lockfiles (npm; also excluded by mcpb pack defaults) ---
 /package-lock.json
+
+# --- The private manifest is copied over manifest.json at pack time; drop the source ---
+/manifest.private.json
