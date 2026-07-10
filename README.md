@@ -26,6 +26,7 @@ A Model Context Protocol (MCP) server for German legal research, providing unifi
 ## Features
 
 ### Bundes- & Landesrecht (`legis:*` tools)
+
 - **Federal and state legislation** — BUND (all federal laws) + 16 Länder (all states)
 - **No authentication** — free public access, no rate limits
 - **Unified interface** — one set of tools for all jurisdictions
@@ -36,6 +37,7 @@ A Model Context Protocol (MCP) server for German legal research, providing unifi
 - **Available states:** BUND, BB, BW, BY, BE, HB, HE, HH, MV, NI, NW, RP, SL, SN, ST, SH, TH
 
 ### Rechtsprechung im Internet (`rii:*` tools)
+
 - **Federal court decisions** — BVerfG, BGH, BVerwG, BFH, BAG, BSG, BPatG (from 2010)
 - **Bavarian state courts** — AG, LG, OLG, VG, VGH, FG, ArbG, LAG, BayVerfGH via gesetze-bayern.de
 - **No authentication** — free public access
@@ -45,6 +47,7 @@ A Model Context Protocol (MCP) server for German legal research, providing unifi
 - **Save to file** — `save_path` parameter to avoid context pollution
 
 ### RIS Österreich (`ris:*` tools)
+
 - **Austrian federal, state & case law** — consolidated Bundesrecht and Landesrecht (all 9 Bundesländer, or filter to one via `bundesland`; results tagged with their Bundesland), plus Judikatur (OGH/OLG/LG via Justiz; VwGH, VfGH, BVwG and others via the `court` filter)
   - **Note:** `bundesland` on `application="landesrecht"` returns that state's **consolidated law** (LrKons). Case law is a separate application — for raw state judikatur use `application="judikatur"` with the appropriate `court` (e.g. `Lvwg` for a Landesverwaltungsgericht), not `bundesland`.
 - **No authentication** — free public Open Government Data REST API (`data.bka.gv.at/ris/api/v2.6`)
@@ -55,9 +58,9 @@ A Model Context Protocol (MCP) server for German legal research, providing unifi
 - **Structured metadata** — Geschäftszahl, Entscheidungsdatum, ECLI, issuing court/organ
 - **Save to file** — `save_path` parameter to avoid context pollution
 - ⚠️ **Austrian** law — for German case law use `rii:*`, for German legislation use `legis:*`
-- ✅ Phase 1 + 2 complete: search, sort, surgical Rn/§ retrieval, table of contents, Bundesland filter, decision links across all courts
 
 ### InfoCuria — CJEU (`icu:*` tools)
+
 - **EU Court of Justice case law** — judgments, opinions, orders from CJEU and General Court
 - **No authentication** — free public access via InfoCuria API
 - **Multilingual** — documents available in all EU languages (default: DE)
@@ -67,6 +70,7 @@ A Model Context Protocol (MCP) server for German legal research, providing unifi
 - **Save to file** — `save_path` parameter to avoid context pollution
 
 ### EUR-Lex (`eul:*` tools)
+
 - **EU legislation** — directives, regulations, decisions, treaties (TFEU, TEU)
 - **No authentication** — free public access via Cellar REST API and SPARQL
 - **Multilingual** — documents available in all EU languages (default: DE)
@@ -76,6 +80,7 @@ A Model Context Protocol (MCP) server for German legal research, providing unifi
 - **Save to file** — `save_path` parameter to avoid context pollution
 
 ### DIP Bundestag (`dip:*` tools)
+
 - **Parliamentary documents** — Bundestagsdrucksachen (Gesetzentwürfe, Beschlussempfehlungen, Anfragen)
 - **Legislative processes** — Vorgänge with status tracking and linked documents
 - **Debate transcripts** — full text search across Plenarprotokolle (BT and BR)
@@ -84,6 +89,7 @@ A Model Context Protocol (MCP) server for German legal research, providing unifi
 - **Save to file** — `save_path` parameter to avoid context pollution
 
 ### arXiv (`arxiv:*` tools)
+
 - **Preprint search** — search by keywords, author, title, abstract, or category
 - **Metadata + abstract** — default response without full text fetch (token-efficient)
 - **HTML full text** — Markdown conversion for papers from ~2024+ (LaTeXML HTML)
@@ -92,6 +98,7 @@ A Model Context Protocol (MCP) server for German legal research, providing unifi
 - **Save to file** — `save_path` parameter to avoid context pollution
 
 ### nautos.de (`nautos:*` tools)
+
 - **DIN/EN/ISO standards** — search and retrieve technical standards from nautos.de
 - **Two-phase document retrieval** — outline (metadata + TOC) first, then sections on demand
 - **Automatic authentication** — IP-based login (auto-detected), user-based login fallback
@@ -256,11 +263,14 @@ This repo uses [Conventional Commits](https://www.conventionalcommits.org/) enfo
 
 - **Manifest-driven providers** — startup, help, shutdown and public/private
   distribution use one checked provider manifest
+
 - **Cheerio + Turndown** for HTML → pandoc Markdown conversion
+
 - **Zod** for input validation
 - **Axios** for HTTP requests (Legis, RII, RIS, InfoCuria, EUR-Lex, DIP, arXiv, nautos)
 - **Structured JSON errors** — all providers return `BaseError.toJSON()` with `code`, `userMessage`, `recoveryHint`; Axios errors auto-wrapped; DNS failures fail fast
 - **Conversion validation** — all HTML→Markdown providers validate output is non-empty; detects upstream layout changes early
+
 - Tools namespaced by source (`legis:`, `rii:`, `ris:`, `icu:`, `eul:`, `dip:`, `arxiv:`, `nautos:`)
 
 ## License

@@ -1,0 +1,35 @@
+# Files to exclude from the MCPB bundle (`mcpb pack`). Gitignore-style syntax.
+# A leading "/" anchors to the bundle root so these do NOT match same-named
+# paths inside node_modules (e.g. a bare "src/" would delete node_modules/debug/src).
+
+# --- Repo sources & tooling — the runtime only needs dist/ ---
+/src/
+/.github/
+/.husky/
+/.vscode/
+/.kiro/
+/scripts/
+/coverage/
+/docs/
+/tsconfig*.json
+/vitest.config.ts
+/eslint.config.js
+/commitlint.config.js
+/.markdownlint.json
+/.editorconfig
+/.gitattributes
+/Dockerfile
+
+# --- Dependency non-runtime files only (docs + type declarations + source maps) ---
+# (mcpb pack already drops *.map and lockfiles by default; listed here for clarity.)
+node_modules/**/*.md
+node_modules/**/*.markdown
+node_modules/**/*.d.ts
+node_modules/**/*.map
+node_modules/**/docs/
+node_modules/**/.github/
+node_modules/**/example/
+node_modules/**/examples/
+
+# --- Lockfiles (npm; also excluded by mcpb pack defaults) ---
+/package-lock.json
