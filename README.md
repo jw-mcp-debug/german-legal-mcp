@@ -106,6 +106,16 @@ A Model Context Protocol (MCP) server for German legal research, providing unifi
 - **File cache** — 30-day TTL, persistent across restarts (`~/.local/share/german-legal-mcp/cache/nautos/`)
 - **Save to file** — `save_path` parameter to dump full document to disk
 
+## Install in Claude Desktop (one-click bundle)
+
+The easiest way to use this server in [Claude Desktop](https://claude.ai/download) is the packaged **MCP Bundle (`.mcpb`)** — no Node.js, no `npx`, no config file:
+
+1. Download **[`german-legal-mcp.mcpb`](https://github.com/metaneutrons/german-legal-mcp/releases/latest/download/german-legal-mcp.mcpb)** from the [latest release](https://github.com/metaneutrons/german-legal-mcp/releases/latest).
+2. In Claude Desktop open **Settings → Extensions** and drag the `.mcpb` onto the window (or use **Install…**).
+3. Optionally set the DIP key or nautos credentials in the extension's settings — everything else works out of the box.
+
+The bundle ships the public, no-authentication sources and is cross-platform (macOS and Windows, Apple Silicon and Intel) — Claude Desktop supplies the Node.js runtime, so a single download works everywhere.
+
 ## Quick Start with npx
 
 ```bash
