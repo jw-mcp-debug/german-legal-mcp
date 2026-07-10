@@ -7,6 +7,7 @@ import {
   readBooleanEnv,
   readEnumEnv,
   readIntegerEnv,
+  readStringEnv,
   readUrlEnv,
   redactEnvironment,
 } from './config.js';
@@ -19,6 +20,17 @@ describe('configuration environment parsing', () => {
     expect(readEnumEnv('MODE', ['a', 'b'] as const, 'a', { MODE: 'b' })).toBe('b');
     expect(readUrlEnv('URL', { URL: 'https://example.com/path' }))
       .toBe('https://example.com/path');
+  });
+
+  it('treats an unsubstituted ${user_config.x} placeholder as unset', () => {
+    // Claude Desktop passes the literal placeholder for an empty optional field.
+    expect(readStringEnv('X', { X: '${user_config.api_secret}' })).toBeUndefined();
+    expect(readStringEnv('X', { X: '  ${user_config.foo}  ' })).toBeUndefined();
+    // A real value that merely contains such text is still honoured.
+    expect(readStringEnv('X', { X: 'prefix ${x}' })).toBe('prefix ${x}');
+    expect(readStringEnv('X', { X: 'realuser' })).toBe('realuser');
+    // readUrlEnv builds on readStringEnv, so a bare placeholder no longer throws.
+    expect(readUrlEnv('URL', { URL: '${user_config.login_endpoint}' })).toBeUndefined();
   });
 
   it('rejects malformed values without terminating the process', () => {

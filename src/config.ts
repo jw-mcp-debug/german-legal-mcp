@@ -41,7 +41,14 @@ export function readStringEnv(
   env: Environment = getEnvironment(),
 ): string | undefined {
   const value = env[name]?.trim();
-  return value || undefined;
+  if (!value) return undefined;
+  // Claude Desktop substitutes ${user_config.x} for a bundle's config fields,
+  // but passes the literal placeholder through for an EMPTY optional field.
+  // Treat such an unsubstituted placeholder as unset, not a real value — else a
+  // provider would "enable" with a bogus value (e.g. a non-URL login endpoint)
+  // and abort startup with a ConfigurationError.
+  if (/^\$\{[^}]*\}$/.test(value)) return undefined;
+  return value;
 }
 
 export function readBooleanEnv(
