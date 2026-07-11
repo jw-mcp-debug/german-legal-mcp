@@ -1,4 +1,3 @@
-import { ConfigurationError } from './config.js';
 import type {
   Provider,
   ProviderManifestEntry,
@@ -29,7 +28,6 @@ export class ProviderRegistry {
   }
 
   async load(onFailure?: (failure: ProviderLoadFailure) => void): Promise<void> {
-    const configurationIssues: string[] = [];
     for (const entry of this.manifest) {
       try {
         const module = await entry.load();
@@ -43,17 +41,14 @@ export class ProviderRegistry {
         this.providers.set(provider.name, provider);
         await provider.initialize?.();
       } catch (error) {
-        if (error instanceof ConfigurationError) {
-          configurationIssues.push(...error.issues.map(
-            (issue) => `${entry.name}: ${issue}`,
-          ));
-        } else {
-          onFailure?.({ provider: entry.name, error });
-        }
+        // A provider that fails to load, has invalid configuration, or fails to
+        // initialize disables ONLY itself — it must never abort the whole server.
+        // A single misconfigured optional provider (e.g. a bad Juris login URL)
+        // would otherwise take all the other providers down with it. onFailure
+        // surfaces the reason to the caller.
+        this.providers.delete(entry.name);
+        onFailure?.({ provider: entry.name, error });
       }
-    }
-    if (configurationIssues.length > 0) {
-      throw new ConfigurationError(configurationIssues);
     }
   }
 

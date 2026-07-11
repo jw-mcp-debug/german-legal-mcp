@@ -5,6 +5,7 @@ import type {
   ToolDefinition,
 } from './shared/types.js';
 import { ProviderRegistry } from './provider-registry.js';
+import { ConfigurationError } from './config.js';
 
 function fixtureProvider(name: string): Provider {
   return {
@@ -66,6 +67,42 @@ describe('ProviderRegistry', () => {
     await registry.load(({ provider }) => failures.push(provider));
 
     expect(failures).toEqual(['expected']);
+    expect(registry.getProviders()).toEqual([]);
+  });
+
+  it('disables a misconfigured provider without aborting the others', async () => {
+    const good = fixtureProvider('good');
+    const badEntry: ProviderManifestEntry = {
+      ...manifestEntry('bad', null),
+      load: async () => ({
+        createProvider: () => {
+          throw new ConfigurationError(['GLMCP_BAD_URL must be a valid absolute URL']);
+        },
+      }),
+    };
+    const failures: Array<{ provider: string; error: unknown }> = [];
+    const registry = new ProviderRegistry([badEntry, manifestEntry('good', good)]);
+
+    // Must NOT throw — a single bad provider used to abort the whole load.
+    await registry.load((f) => failures.push(f));
+
+    expect(failures.map((f) => f.provider)).toEqual(['bad']);
+    expect(failures[0]?.error).toBeInstanceOf(ConfigurationError);
+    expect(registry.getProviders()).toEqual([good]);
+    expect(registry.getTools().map((t) => t.name)).toEqual(['good:search']);
+  });
+
+  it('removes a provider that fails to initialize', async () => {
+    const flaky = fixtureProvider('flaky');
+    flaky.initialize = vi.fn(async () => {
+      throw new Error('init boom');
+    });
+    const failures: string[] = [];
+    const registry = new ProviderRegistry([manifestEntry('flaky', flaky)]);
+
+    await registry.load(({ provider }) => failures.push(provider));
+
+    expect(failures).toEqual(['flaky']);
     expect(registry.getProviders()).toEqual([]);
   });
 

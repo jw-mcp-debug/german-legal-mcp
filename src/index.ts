@@ -12,7 +12,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { rootLogger } from './shared/logger.js';
-import { ConfigurationError, redactEnvironment } from './config.js';
+import { ConfigurationError } from './config.js';
 import { PROVIDER_MANIFEST } from './provider-manifest.js';
 import { ProviderRegistry } from './provider-registry.js';
 
@@ -154,25 +154,38 @@ async function cleanup(signal?: string) {
   process.exit(0);
 }
 
+// Surface fatal errors to stderr synchronously. The pino logger runs in a
+// worker thread, so its buffered output can be lost when the process exits —
+// a crash would otherwise leave the host (e.g. Claude Desktop) with no reason.
+function fatal(context: string, error: unknown): never {
+  const detail = error instanceof Error ? (error.stack ?? error.message) : String(error);
+  process.stderr.write(`[german-legal-mcp] FATAL: ${context}\n${detail}\n`);
+  rootLogger.error(`Fatal: ${context}`, { error });
+  process.exit(1);
+}
+
+process.on("uncaughtException", (error) => fatal("uncaught exception", error));
+process.on("unhandledRejection", (reason) => fatal("unhandled rejection", reason));
 process.on("SIGINT", () => cleanup("SIGINT"));
 process.on("SIGTERM", () => cleanup("SIGTERM"));
 process.stdin.on("close", () => cleanup("stdin close"));
 
-try {
-  await providerRegistry.load(({ provider, error }) => {
-    rootLogger.error(`Failed to load provider from ${provider}`, { error });
-  });
-  for (const provider of providerRegistry.getProviders()) {
-    rootLogger.info(`Provider registered: ${provider.name}`);
+// A provider that fails to load or is misconfigured disables ONLY itself (with a
+// warning) — it never aborts the server, so the remaining providers stay usable.
+await providerRegistry.load(({ provider, error }) => {
+  if (error instanceof ConfigurationError) {
+    rootLogger.warn(`Provider "${provider}" disabled: invalid configuration`, {
+      issues: error.issues,
+    });
+  } else {
+    rootLogger.warn(`Provider "${provider}" disabled: failed to load`, { error });
   }
-} catch (error) {
-  if (!(error instanceof ConfigurationError)) throw error;
-  rootLogger.error('Startup configuration validation failed', {
-    issues: error.issues,
-    environment: redactEnvironment(),
-  });
-  throw error;
-}
+});
+
+const activeProviders = providerRegistry.getProviders();
+rootLogger.info(
+  `Active providers (${activeProviders.length}): ${activeProviders.map((p) => p.name).join(', ') || 'none'}`,
+);
 
 const transport = new StdioServerTransport();
 await server.connect(transport);
