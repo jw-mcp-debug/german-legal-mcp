@@ -4,6 +4,7 @@
   "display_name": "German Legal MCP",
   "version": "2.1.0",
   "description": "German & Austrian legal research: legislation, case law, EUR-Lex, Austrian RIS, DIP Bundestag, InfoCuria and arXiv — one MCP server, no API keys required for the public sources.",
+  "icon": "icon.png",
   "author": {
     "name": "Fabian Schmieder",
     "url": "https://github.com/metaneutrons"
