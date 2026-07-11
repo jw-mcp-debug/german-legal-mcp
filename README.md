@@ -1,9 +1,14 @@
+<div align="center">
+
+<img src="icon.png" alt="German Legal MCP" width="128" height="128">
+
 # German Legal MCP Server
 
-[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
-[![Node.js Version](https://img.shields.io/badge/node-%3E%3D25.0.0-brightgreen)](https://nodejs.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-6.0-blue)](https://www.typescriptlang.org/)
-[![MCP](https://img.shields.io/badge/MCP-1.29-purple)](https://modelcontextprotocol.io/)
+German &amp; Austrian legal research — one MCP server
+
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0) [![Node.js Version](https://img.shields.io/badge/node-%3E%3D25.0.0-brightgreen)](https://nodejs.org/) [![TypeScript](https://img.shields.io/badge/TypeScript-6.0-blue)](https://www.typescriptlang.org/) [![MCP](https://img.shields.io/badge/MCP-1.29-purple)](https://modelcontextprotocol.io/)
+
+</div>
 
 > **⚠️ WARNING: Work in Progress**  
 > This project is currently under active development and **not production-ready**. APIs may change without notice, and features may be incomplete or unstable. Use at your own risk.
