@@ -177,7 +177,7 @@ or add your MCP client config (e.g., `claude_desktop_config.json`):
 
 | Tool | Description |
 |------|-------------|
-| `legis:search` | Search federal and state legislation. Parameter: `query`, `state` (e.g., "BW", "BE"), `limit`. Note: BUND does not support search. |
+| `legis:search` | Search state legislation. Parameter: `query`, `state` (e.g., "BW", "BE"), `limit`. Länder search uses official portal/catalogue data with local normalization and reranking so common abbreviations and title queries (e.g. `VwVfG NRW`, `BbgVwVfG`, `BremVwVfG`) resolve to the root law before section hits. Note: BUND does not support search. |
 | `legis:get` | Retrieve a specific law/norm. BUND: `id` = "law/section" (e.g., "bgb/823"). Länder: `id` from search results. Optional `save_path`. |
 | `legis:toc` | Compact table of contents for a law — section numbers and headings. Supports `from`/`to` range and `depth` filter. BUND: `id` = law abbreviation (e.g., "bgb"). |
 | `legis:states` | List available jurisdictions with implementation status. |

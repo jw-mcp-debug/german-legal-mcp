@@ -33,10 +33,10 @@ export default defineConfig({
       // so CI blocks regressions without flaking on minor fluctuations.
       // Final Phase 6 target: lines 85 / branches 80 / critical modules ≥95.
       thresholds: {
-        lines: 81,
-        statements: 79,
-        functions: 76,
-        branches: 64,
+        lines: 85,
+        statements: 82,
+        functions: 80,
+        branches: 68,
       },
     },
     testTimeout: 10000,

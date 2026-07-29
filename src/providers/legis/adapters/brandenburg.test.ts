@@ -11,7 +11,7 @@ describe('BrandenburgAdapter', () => {
   it('keeps only Vorschrift links (gesetze/verordnungen/...) from the results', async () => {
     mockAxios.get.mockResolvedValue({ data: '', headers: { 'set-cookie': ['c=1; Path=/'] } });
     mockAxios.post.mockResolvedValue({
-      data: '<a href="/gesetze/bbgnatschg">BbgNatSchG</a>'
+      data: '<a href="/gesetze/bbgnatschg">Brandenburgisches Naturschutzausführungsgesetz (BbgNatSchAG)</a>'
         + '<a href="/gesetze/list">list ignored</a>'
         + '<a href="/impressum">chrome ignored</a>',
     });
@@ -19,8 +19,38 @@ describe('BrandenburgAdapter', () => {
     const results = await new BrandenburgAdapter().search('BB', 'naturschutz', 10);
 
     expect(results).toEqual([
-      { id: 'gesetze/bbgnatschg', title: 'BbgNatSchG', subtitle: '', date: '' },
+      {
+        id: 'gesetze/bbgnatschg',
+        title: 'Brandenburgisches Naturschutzausführungsgesetz (BbgNatSchAG)',
+        subtitle: '',
+        date: '',
+      },
     ]);
+  });
+
+  it('tries Brandenburg abbreviation suffix aliases', async () => {
+    mockAxios.get.mockResolvedValue({ data: '', headers: { 'set-cookie': ['c=1; Path=/'] } });
+    mockAxios.post
+      .mockResolvedValueOnce({ data: '' })
+      .mockResolvedValueOnce({
+        data: '<a href="/gesetze/vwvfgbbg">Verwaltungsverfahrensgesetz für das Land Brandenburg (VwVfGBbg)</a>',
+      })
+      .mockResolvedValueOnce({ data: '' });
+
+    const results = await new BrandenburgAdapter().search('BB', 'BbgVwVfG', 10);
+
+    expect(mockAxios.post).toHaveBeenNthCalledWith(
+      2,
+      expect.any(String),
+      expect.stringContaining('VwVfGBbg'),
+      expect.any(Object),
+    );
+    expect(results[0]).toEqual({
+      id: 'gesetze/vwvfgbbg',
+      title: 'Verwaltungsverfahrensgesetz für das Land Brandenburg (VwVfGBbg)',
+      subtitle: '',
+      date: '',
+    });
   });
 
   it('renders a document to markdown', async () => {

@@ -91,6 +91,21 @@ export class AuthenticationError extends PermanentError {
   override readonly recoveryHint: string = 'Verify credentials are correct.';
 }
 
+/**
+ * The login flow did not complete in time — a navigation/OIDC step hung (a
+ * headless-browser navigation timeout) or the network was unreachable. This is
+ * a transient infrastructure condition, NOT a credential problem, so it must
+ * not be reported as an AuthenticationError: the daemon relaunches the browser
+ * and retries once, and a manual relogin (after checking network/VPN) or an MCP
+ * restart recovers it.
+ */
+export class LoginTimeoutError extends RecoverableError {
+  override readonly code: string = 'LOGIN_TIMEOUT';
+  override readonly userMessage: string = 'Login timed out before a session was established.';
+  override readonly recoveryHint: string =
+    'This is a network/session issue, not wrong credentials. Check your internet/VPN connection, then retry authentication. If it persists, restart the MCP server to relaunch the login browser.';
+}
+
 export class ValidationError extends PermanentError {
   override readonly code: string = 'VALIDATION_ERROR';
   override readonly userMessage: string = 'Invalid input provided.';

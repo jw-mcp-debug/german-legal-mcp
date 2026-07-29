@@ -10,6 +10,7 @@ export const legisTools: ToolDefinition[] = [
     description:
       'Search German state legislation (Landesrecht) by keyword. ' +
       'Returns results with IDs for retrieval via legis:get. ' +
+      'Official abbreviations such as "HKG" or "PolG" are often more reliable than descriptive phrases. ' +
       'Covers all 16 Bundesländer. BUND does not support search — use legis:get directly.',
     inputSchema: z.object({
       query: z.string().describe('Search query (e.g., "Polizeigesetz", "Schulgesetz", "PolG")'),

@@ -2,12 +2,22 @@ import axios from 'axios';
 import { load } from 'cheerio';
 import TurndownService from 'turndown';
 import type { LegisAdapter, SearchResult, LegisEntry } from '../types.js';
+import { rankSearchResults, type RankableSearchResult } from './search-ranking.js';
 
 const BASE = 'https://www.transparenz.bremen.de';
 const turndown = new TurndownService({ headingStyle: 'atx' });
 
 function docUrl(id: string): string {
   return `${BASE}/sixcms/detail.php?gsid=bremen2014_tp.c.${id}.de&asl=bremen203_tpgesetz.c.55340.de&template=20_gp_ifg_meta_detail_d`;
+}
+
+function toSearchResult(result: RankableSearchResult): SearchResult {
+  return {
+    id: result.id,
+    title: result.title,
+    subtitle: result.subtitle,
+    date: result.date,
+  };
 }
 
 export class BremenAdapter implements LegisAdapter {
@@ -19,24 +29,31 @@ export class BremenAdapter implements LegisAdapter {
         template: '20_search_d',
         'search[send]': 'true',
         'search[vt]': query,
-        'search[area]': '18',
+        max: Math.max(20, limit * 5),
         lang: 'de',
       },
     });
 
     const $ = load(resp.data);
-    const results: SearchResult[] = [];
+    const results: RankableSearchResult[] = [];
     $('a[href*="metainformationen/"]').each((_, el) => {
       const href = $(el).attr('href')!;
       const text = $(el).text().trim();
-      if (!text || text.length < 5 || text.includes('Zur Inhaltsseite') || text.includes('zur News') || results.length >= limit) return;
-      const match = href.match(/-(\d+)\?/);
+      if (!text || text.length < 5 || text.includes('Zur Inhaltsseite') || text.includes('zur News')) return;
+      const match = href.match(/-(\d+)(?:\?|$)/);
       const id = match?.[1];
       if (id !== undefined && !results.some((r) => r.id === id)) {
-        results.push({ id, title: text, subtitle: '', date: '' });
+        results.push({
+          id,
+          title: text,
+          subtitle: '',
+          date: '',
+          rankText: `${text} ${href}`,
+          isRootDocument: true,
+        });
       }
     });
-    return results;
+    return rankSearchResults(results, query, limit).map(toSearchResult);
   }
 
   async get(_state: string, id: string): Promise<LegisEntry> {

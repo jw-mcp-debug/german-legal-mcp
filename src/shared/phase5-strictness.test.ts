@@ -10,6 +10,17 @@ function productionFiles(directory = join(process.cwd(), 'src')): string[] {
   });
 }
 
+function stripCommentsAndSingleLineStrings(source: string): string {
+  return source
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('\n')
+    .map((line) => line
+      .replace(/\/\/.*$/, '')
+      .replace(/(['"])(?:\\.|(?!\1).)*\1/g, '')
+      .replace(/`(?:\\.|[^`\\])*`/g, ''))
+    .join('\n');
+}
+
 describe('Phase 5 strictness gates', () => {
   it('keeps every agreed production compiler flag enabled', () => {
     const config = JSON.parse(readFileSync(
@@ -33,10 +44,7 @@ describe('Phase 5 strictness gates', () => {
   it('has no explicit any in production sources', () => {
     const offenders = productionFiles().filter((path) => (
       /(?::\s*any\b|<any>|as\s+any\b|any\[\])/.test(
-        readFileSync(path, 'utf-8')
-          .replace(/\/\/.*$/gm, '')
-          .replace(/\/\*[\s\S]*?\*\//g, '')
-          .replace(/(['"`])(?:\\.|(?!\1)[\s\S])*\1/g, ''),
+        stripCommentsAndSingleLineStrings(readFileSync(path, 'utf-8')),
       )
     ));
     expect(offenders).toEqual([]);

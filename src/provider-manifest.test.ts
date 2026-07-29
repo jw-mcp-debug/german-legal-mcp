@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { ENVIRONMENT_VARIABLES } from './config.js';
-import { PROVIDER_MANIFEST } from './provider-manifest.js';
+import { getProviderManifest, PROVIDER_MANIFEST } from './provider-manifest.js';
 
 describe('provider manifest', () => {
   it('has unique names and complete enablement metadata', () => {
@@ -24,5 +24,27 @@ describe('provider manifest', () => {
       expect(readme, `provider ${entry.name} is missing from README.md`)
         .toContain(entry.name.toLowerCase());
     }
+  });
+
+  it('filters by distribution without mutating the manifest', () => {
+    expect(getProviderManifest()).toBe(PROVIDER_MANIFEST);
+    expect(getProviderManifest('public').map((entry) => entry.name)).toEqual([
+      'arxiv',
+      'dip',
+      'eul',
+      'icu',
+      'legis',
+      'rii',
+      'ris',
+      'nautos',
+    ]);
+    expect(getProviderManifest('private').map((entry) => entry.name)).toEqual(['juris', 'beck']);
+  });
+
+  it('lazy-loads all public provider modules', async () => {
+    await Promise.all(getProviderManifest('public').map(async (entry) => {
+      const mod = await entry.load();
+      expect(mod.createProvider, entry.name).toEqual(expect.any(Function));
+    }));
   });
 });

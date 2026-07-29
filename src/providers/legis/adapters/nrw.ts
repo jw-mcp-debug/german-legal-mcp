@@ -2,18 +2,41 @@ import axios from 'axios';
 import { load } from 'cheerio';
 import TurndownService from 'turndown';
 import type { LegisAdapter, SearchResult, LegisEntry, TocEntry } from '../types.js';
+import { rankSearchResults, type RankableSearchResult } from './search-ranking.js';
 
 const BASE = 'https://recht.nrw.de';
 const SEARCH = `${BASE}/search-middleware/opensearch_internet/_search`;
 const turndown = new TurndownService({ headingStyle: 'atx' });
+const NRW_SEARCH_FETCH_LIMIT = 100;
+const NRW_TITLE_FIELDS = ['field_long_title', 'field_short_title', 'field_abbreviation', 'title'] as const;
+const NRW_BODY_FIELDS = [
+  'field_body_field_footnotes_field_footnote_description_processed',
+  'field_body_field_headline',
+  'field_body_field_num',
+  'field_body_field_reference_title',
+  'field_body_field_text_processed',
+  'field_change_history_footnote_field_footnote_description_processed',
+  'field_change_history_footnote_field_reference_title',
+  'field_conclusions_field_footnotes_field_footnote_description_processed',
+  'field_conclusions_field_reference_title',
+  'field_conclusions_field_text_processed',
+  'field_footnotes_field_reference_title',
+  'field_full_quotation_processed',
+  'field_preamble_field_footnotes_field_footnote_description_processed',
+  'field_preamble_field_reference_title',
+  'field_preamble_field_text_processed',
+] as const;
 
 interface SearchHit {
   _id?: string;
   _source?: {
     url?: string[];
     field_abbreviation?: string[];
+    field_short_title?: string[];
     field_long_title?: string[];
+    field_full_quotation_processed?: string[];
     field_document_type_name?: string[];
+    title?: string[];
   };
 }
 
@@ -25,6 +48,69 @@ interface SearchResponse {
 
 function nodeId(id: string): string {
   return `entity:node/${id}:de`;
+}
+
+function currentStatusFilters(): object[] {
+  const now = new Date();
+  now.setUTCHours(12, 0, 0, 0);
+  const timestamp = Math.floor(now.getTime() / 1000);
+
+  return [
+    { bool: { should: [{ range: { field_inforce_date: { lte: timestamp } } }, { bool: { must_not: { exists: { field: 'field_inforce_date' } } } }] } },
+    { bool: { should: [{ range: { field_outforce_date: { gt: timestamp } } }, { bool: { must_not: { exists: { field: 'field_outforce_date' } } } }] } },
+    { bool: { should: [{ term: { field_historically: { value: false } } }, { bool: { must_not: { exists: { field: 'field_historically' } } } }] } },
+    { bool: { must_not: { range: { field_effective_from: { gt: timestamp } } } } },
+  ];
+}
+
+function nrwSearchQuery(query: string): object {
+  const wildcardAndMatchQueries = NRW_BODY_FIELDS.flatMap((field) => [
+    { wildcard: { [field]: { value: `*${query}*`, boost: 1, case_insensitive: true } } },
+    { match: { [field]: { query, operator: 'and', boost: 1, fuzziness: 1 } } },
+  ]);
+  const current = currentStatusFilters();
+
+  return {
+    function_score: {
+      functions: [{ filter: { bool: { must: current } }, weight: 1.05 }],
+      query: {
+        bool: {
+          must: [
+            { terms: { type: ['state_law_and_regulations', 'state_law_ministerial_gazette'] } },
+            {
+              dis_max: {
+                queries: [
+                  { multi_match: { fields: NRW_TITLE_FIELDS, query, operator: 'and', boost: 50, type: 'phrase', slop: 0 } },
+                  ...wildcardAndMatchQueries,
+                ],
+              },
+            },
+            { bool: { should: current } },
+          ],
+        },
+      },
+    },
+  };
+}
+
+function extractAbbreviation(text: string): string {
+  const parentheticals = [...text.matchAll(/\(([^()]+)\)/g)].map((match) => match[1]?.trim() ?? '');
+  for (const parenthetical of parentheticals.reverse()) {
+    const afterDash = parenthetical.split(/\s[-–]\s/).pop()?.trim() ?? parenthetical;
+    if (/[A-ZÄÖÜ][A-Za-zÄÖÜäöüß]*[A-ZÄÖÜ]/.test(afterDash) && afterDash.length <= 40) {
+      return afterDash;
+    }
+  }
+  return '';
+}
+
+function toSearchResult(result: RankableSearchResult): SearchResult {
+  return {
+    id: result.id,
+    title: result.title,
+    subtitle: result.subtitle,
+    date: result.date,
+  };
 }
 
 async function resolveUrl(id: string): Promise<string> {
@@ -45,29 +131,36 @@ export class NRWAdapter implements LegisAdapter {
 
   async search(_state: string, query: string, limit: number): Promise<SearchResult[]> {
     const resp = await axios.post<SearchResponse>(SEARCH, {
-      query: {
-        bool: {
-          must: [{ query_string: { query, default_operator: 'AND' } }],
-          filter: [
-            { term: { field_historically: false } },
-            { term: { type: 'state_law_and_regulations' } },
-          ],
-        },
-      },
-      size: limit,
-      _source: ['url', 'field_abbreviation', 'field_long_title', 'field_document_type_name'],
+      query: nrwSearchQuery(query),
+      size: NRW_SEARCH_FETCH_LIMIT,
+      _source: [
+        'url',
+        'field_abbreviation',
+        'field_short_title',
+        'field_long_title',
+        'field_full_quotation_processed',
+        'field_document_type_name',
+        'title',
+      ],
     });
 
-    return ((resp.data.hits?.hits || []) as SearchHit[]).map((h) => {
+    const results = ((resp.data.hits?.hits || []) as SearchHit[]).map((h): RankableSearchResult => {
       const s = h._source ?? {};
       const nid = h._id?.match(/node\/(\d+)/)?.[1] || '';
+      const longTitle = s.field_long_title?.[0] || s.title?.[0] || '';
+      const shortTitle = s.field_short_title?.[0] || s.field_abbreviation?.[0] || extractAbbreviation(longTitle);
+      const fullQuotation = s.field_full_quotation_processed?.[0] || '';
       return {
         id: nid,
-        title: s.field_long_title?.[0] || '',
-        subtitle: s.field_abbreviation?.[0] || '',
+        title: longTitle || shortTitle,
+        subtitle: shortTitle,
         date: s.field_document_type_name?.[0] || '',
+        rankText: `${shortTitle} ${longTitle} ${fullQuotation} ${s.url?.[0] ?? ''}`,
+        isRootDocument: true,
       };
     });
+
+    return rankSearchResults(results, query, limit).map(toSearchResult);
   }
 
   async get(_state: string, id: string): Promise<LegisEntry> {

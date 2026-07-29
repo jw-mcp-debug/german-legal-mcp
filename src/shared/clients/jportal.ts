@@ -134,7 +134,7 @@ export async function jportalSearch(
         clientID: session.portalId,
         clientVersion: `${session.portalId} - V08_28_00`,
         r3ID: new Date().toISOString(),
-        searches: [{ id: '_all', value: query }],
+        searches: [{ id: 'FastSearch', value: query }],
         filters: { CATEGORY: ['Gesetze'] },
         searchTasks: {
           RESULT_LIST: { start: 1, size: limit, sort: 'scoreR3' },

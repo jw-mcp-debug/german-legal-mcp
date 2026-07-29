@@ -3,8 +3,21 @@ import type {
   ProviderModule,
 } from './shared/types.js';
 
-function loadProvider(name: string): Promise<ProviderModule> {
-  return import(`./providers/${name}/index.js`) as Promise<ProviderModule>;
+const PROVIDER_LOADERS = {
+  arxiv: () => import('./providers/arxiv/index.js') as Promise<ProviderModule>,
+  dip: () => import('./providers/dip/index.js') as Promise<ProviderModule>,
+  eul: () => import('./providers/eul/index.js') as Promise<ProviderModule>,
+  icu: () => import('./providers/icu/index.js') as Promise<ProviderModule>,
+  legis: () => import('./providers/legis/index.js') as Promise<ProviderModule>,
+  rii: () => import('./providers/rii/index.js') as Promise<ProviderModule>,
+  ris: () => import('./providers/ris/index.js') as Promise<ProviderModule>,
+  nautos: () => import('./providers/nautos/index.js') as Promise<ProviderModule>,
+} as const;
+
+type ProviderName = keyof typeof PROVIDER_LOADERS;
+
+function loadProvider(name: ProviderName): Promise<ProviderModule> {
+  return PROVIDER_LOADERS[name]();
 }
 
 export const PROVIDER_MANIFEST: readonly ProviderManifestEntry[] = [

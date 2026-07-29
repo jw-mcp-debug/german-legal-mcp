@@ -14,25 +14,55 @@ beforeEach(() => {
 });
 
 describe('NRWAdapter', () => {
-  it('parses OpenSearch hits into search results', async () => {
+  it('ranks current catalog hits locally using short title and long title metadata', async () => {
     mockAxios.post.mockResolvedValue({
       data: {
         hits: {
-          hits: [{
-            _id: 'entity:node/123:de',
-            _source: {
-              field_long_title: ['Umweltgesetz'],
-              field_abbreviation: ['UmwG'],
-              field_document_type_name: ['Gesetz'],
+          hits: [
+            {
+              _id: 'entity:node/999:de',
+              _source: {
+                field_long_title: ['Vergabeverordnung NRW'],
+                field_short_title: ['VergabeVO NRW'],
+                field_document_type_name: ['Rechtsverordnung'],
+              },
             },
-          }],
+            {
+              _id: 'entity:node/123:de',
+              _source: {
+                field_long_title: ['Verwaltungsverfahrensgesetz für das Land Nordrhein-Westfalen'],
+                field_short_title: ['VwVfG NRW'],
+                field_document_type_name: ['Gesetz'],
+              },
+            },
+          ],
         },
       },
     });
 
-    const results = await new NRWAdapter().search('NW', 'umwelt', 10);
+    const results = await new NRWAdapter().search('NW', 'VwVfG NRW', 10);
 
-    expect(results).toEqual([{ id: '123', title: 'Umweltgesetz', subtitle: 'UmwG', date: 'Gesetz' }]);
+    expect(mockAxios.post).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({
+      size: 100,
+      query: {
+        function_score: {
+          functions: expect.any(Array),
+          query: {
+            bool: {
+              must: expect.arrayContaining([
+                { terms: { type: ['state_law_and_regulations', 'state_law_ministerial_gazette'] } },
+              ]),
+            },
+          },
+        },
+      },
+    }));
+    expect(results).toEqual([{
+      id: '123',
+      title: 'Verwaltungsverfahrensgesetz für das Land Nordrhein-Westfalen',
+      subtitle: 'VwVfG NRW',
+      date: 'Gesetz',
+    }]);
   });
 
   it('maps body fields into a table of contents', async () => {

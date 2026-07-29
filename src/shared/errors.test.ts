@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { wrapAxiosError, NetworkError, PermanentError, AuthenticationError } from './errors.js';
+import { wrapAxiosError, NetworkError, PermanentError, AuthenticationError, LoginTimeoutError, RecoverableError } from './errors.js';
 
 function makeAxiosError(code?: string, status?: number): Error & { isAxiosError: true; code?: string; response?: { status: number; statusText: string } } {
   const err = new Error(code ? `${code}: test` : `Request failed with status ${status}`) as any;
@@ -47,5 +47,16 @@ describe('wrapAxiosError', () => {
     const result = wrapAxiosError(makeAxiosError(undefined, 403));
     expect(result).toBeInstanceOf(PermanentError);
     expect(result!.message).toContain('403');
+  });
+});
+
+describe('LoginTimeoutError', () => {
+  it('is recoverable and points at network/session, not credentials', () => {
+    const err = new LoginTimeoutError('Login navigation did not complete: timeout');
+    expect(err).toBeInstanceOf(RecoverableError);
+    expect(err).not.toBeInstanceOf(AuthenticationError);
+    expect(err.code).toBe('LOGIN_TIMEOUT');
+    expect(err.recoveryHint).toMatch(/network|VPN|restart/i);
+    expect(err.recoveryHint.toLowerCase()).not.toContain('verify credentials are correct');
   });
 });

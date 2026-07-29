@@ -15,16 +15,32 @@ import { JPortalAdapter } from './jportal.js';
 beforeEach(() => { jportalSearch.mockReset(); jportalGetDocument.mockReset(); });
 
 describe('JPortalAdapter', () => {
-  it('maps jPortal search hits to legis search results', async () => {
+  it('reranks and deduplicates jPortal section hits to root laws', async () => {
     jportalSearch.mockResolvedValue([
-      { docId: 'jlr-Foo', title: 'Hessisches Gesetz', subtitle: 'HGes', date: '2020-01-01' },
+      {
+        docId: 'jlr-FooNN00000000003',
+        title: '§ 2 HGes',
+        subtitle: 'Landesnorm Hessen | - Einzelregel | Hessisches Gesetz (HGes) vom 1. Januar 2020 | gültig ab: 2020',
+        date: '2020-01-01',
+      },
+      {
+        docId: 'jlr-Foo',
+        title: 'HGes',
+        subtitle: 'Landesnorm Hessen | Hessisches Gesetz (HGes) vom 1. Januar 2020 | gültig ab: 2020',
+        date: '2020-01-01',
+      },
     ]);
 
-    const results = await new JPortalAdapter().search('HE', 'gesetz', 5);
+    const results = await new JPortalAdapter().search('HE', 'HGes', 5);
 
-    expect(jportalSearch).toHaveBeenCalledWith('HE', 'gesetz', 5);
+    expect(jportalSearch).toHaveBeenCalledWith('HE', 'HGes', 100);
     expect(results).toEqual([
-      { id: 'jlr-Foo', title: 'Hessisches Gesetz', subtitle: 'HGes', date: '2020-01-01' },
+      {
+        id: 'jlr-Foo',
+        title: 'HGes',
+        subtitle: 'Landesnorm Hessen | Hessisches Gesetz (HGes) vom 1. Januar 2020 | gültig ab: 2020',
+        date: '2020-01-01',
+      },
     ]);
   });
 

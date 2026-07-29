@@ -10,7 +10,7 @@ beforeEach(() => mockAxios.get.mockReset());
 describe('BremenAdapter', () => {
   it('parses metainformation links into search results', async () => {
     mockAxios.get.mockResolvedValue({
-      data: '<a href="metainformationen/gesetz-12345?lang=de">Bremisches Informationsfreiheitsgesetz</a>',
+      data: '<a href="https://www.transparenz.bremen.de/metainformationen/bremisches-informationsfreiheitsgesetz-12345">Bremisches Informationsfreiheitsgesetz</a>',
     });
 
     const results = await new BremenAdapter().search('HB', 'informationsfreiheit', 10);

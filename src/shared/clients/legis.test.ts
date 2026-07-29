@@ -143,6 +143,32 @@ describe('jportal client', () => {
     );
   });
 
+  it('should search with the configured FastSearch field', async () => {
+    const { jportalSearch } = await getJportal();
+    mockInitResponse('bsbw');
+    mockPost.mockResolvedValueOnce({ data: { hits: 0 } } as any);
+
+    await expect(jportalSearch('BW', 'Kammergesetz Heilberufe', 10)).resolves.toEqual([]);
+    expect(mockPost).toHaveBeenLastCalledWith(
+      expect.stringContaining('/search'),
+      expect.objectContaining({
+        searches: [{ id: 'FastSearch', value: 'Kammergesetz Heilberufe' }],
+      }),
+      expect.any(Object),
+    );
+  });
+
+  it('should propagate search 404 because no hits are reported as HTTP 200', async () => {
+    const { jportalSearch } = await getJportal();
+    mockInitResponse('bsbw');
+    const error: any = new Error('Request failed with status code 404');
+    error.isAxiosError = true;
+    error.response = { status: 404 };
+    mockPost.mockRejectedValueOnce(error);
+
+    await expect(jportalSearch('BW', 'Kammergesetz Heilberufe', 10)).rejects.toThrow('404');
+  });
+
   it('should fetch document', async () => {
     const { jportalGetDocument } = await getJportal();
     mockInitResponse('bsbw');

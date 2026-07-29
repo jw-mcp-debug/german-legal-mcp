@@ -45,6 +45,16 @@ describe('LegisProvider', () => {
     expect(res.content[0].text).toContain('`g1`');
   });
 
+  it('returns an empty search response without marking it as an error', async () => {
+    const res = await provider().handleToolCall('legis:search', {
+      query: 'Kammergesetz Heilberufe',
+      state: 'YY',
+    });
+
+    expect(res.isError).toBeUndefined();
+    expect(res.content[0].text).toContain('Found 0 results');
+  });
+
   it('renders a document and saves it to a file', async () => {
     const res = await provider().handleToolCall('legis:get', { id: 'g1', state: 'XX' });
     expect(res.content[0].text).toContain('# Gesetz X');
