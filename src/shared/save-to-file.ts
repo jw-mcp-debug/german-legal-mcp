@@ -1,5 +1,5 @@
 import { mkdir, writeFile } from 'node:fs/promises';
-import { dirname } from 'node:path';
+import { dirname, isAbsolute } from 'node:path';
 import type { ToolResult } from './types.js';
 
 /**
@@ -11,6 +11,11 @@ import type { ToolResult } from './types.js';
  * @param meta - Additional metadata lines to include in the response
  */
 export async function saveToFile(savePath: string, content: string, meta?: string): Promise<ToolResult> {
+  if (!isAbsolute(savePath)) {
+    throw new Error(
+      `save_path must be an absolute path; relative paths are not supported: ${JSON.stringify(savePath)}`,
+    );
+  }
   await mkdir(dirname(savePath), { recursive: true });
   await writeFile(savePath, content, 'utf-8');
   const msg = `Saved to ${savePath} (${content.length} chars)${meta ? `\n\n${meta}` : ''}`;

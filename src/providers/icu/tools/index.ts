@@ -24,7 +24,7 @@ export const icuTools: ToolDefinition[] = [
       case_id: z.string().describe('Published case ID (e.g., "C-476/17") or CELEX number (e.g., "62017CJ0476")'),
       language: z.string().optional().default('DE').describe('Language code (default: DE)'),
       section: z.string().optional().describe('Extract section: "Rn 5-12", heading text, or "lines:100-200"'),
-      save_path: z.string().optional().describe('Save full document to this file path instead of returning content'),
+      save_path: z.string().optional().describe('Absolute file path for the full document. Relative paths are not supported.'),
     }),
   },
 ];

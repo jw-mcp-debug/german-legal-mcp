@@ -27,7 +27,7 @@ export const legisTools: ToolDefinition[] = [
     inputSchema: z.object({
       id: z.string().describe('Document ID. BUND: "law/section" (e.g., "bgb/823", "gg/Art. 1"). Länder: ID from legis:search.'),
       state: stateEnum.describe('Jurisdiction (e.g., "BUND", "BW", "NW")'),
-      save_path: z.string().optional().describe('Save full document to file instead of returning content.'),
+      save_path: z.string().optional().describe('Absolute file path for the full document. Relative paths are not supported.'),
     }),
   },
   {

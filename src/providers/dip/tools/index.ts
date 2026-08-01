@@ -27,7 +27,7 @@ export const dipTools: ToolDefinition[] = [
     inputSchema: z.object({
       dokumentnummer: z.string().describe('Dokumentnummer (e.g., "19/27426", "20/1234")'),
       section: z.string().optional().describe('Section to extract: heading text (e.g., "Zu § 5 UrhDaG-E", "Begründung", "Zu Artikel 1") or "lines:100-200"'),
-      save_path: z.string().optional().describe('Save full document to this file path instead of returning content'),
+      save_path: z.string().optional().describe('Absolute file path for the full document. Relative paths are not supported.'),
     }),
   },
   {

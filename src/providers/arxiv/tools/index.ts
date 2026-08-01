@@ -24,7 +24,7 @@ export const arxivTools: ToolDefinition[] = [
     inputSchema: z.object({
       id: z.string().describe('arXiv ID (e.g., "2501.02725", "2501.02725v5")'),
       section: z.string().optional().describe('Section heading or "lines:100-200". Triggers full text fetch.'),
-      save_path: z.string().optional().describe('Save full text to file. Triggers full text fetch.'),
+      save_path: z.string().optional().describe('Absolute file path for the full text. Relative paths are not supported. Triggers full text fetch.'),
     }),
   },
 ];

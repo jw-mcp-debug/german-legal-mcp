@@ -23,7 +23,7 @@ export const riiTools: ToolDefinition[] = [
     inputSchema: z.object({
       doc_id: z.string().describe('Document ID from search results (e.g., "jb-KORE704442026" for BUND, "Y-300-Z-GRURRS-B-2021-N-55699" for BY)'),
       part: z.enum(['K', 'L']).optional().default('L').describe('K = Kurztext (summary), L = Langtext (full text, default). Only for source "BUND".'),
-      save_path: z.string().optional().describe('Save full document to this file path instead of returning content. Returns metadata only.'),
+      save_path: z.string().optional().describe('Absolute file path for the full document. Relative paths are not supported. Returns metadata only.'),
       source: z.enum(['BUND', 'BY']).optional().default('BUND').describe('Source: "BUND" (federal, default) or "BY" (Bavarian state courts)'),
       section: z.string().optional().describe('Section heading or "lines:100-200". Only for source "BY".'),
     }),

@@ -23,7 +23,7 @@ export const nautosTools: ToolDefinition[] = [
     inputSchema: z.object({
       acCode: z.string().describe('Document identifier from search results (e.g., "DE30062916")'),
       section: z.string().optional().describe('Section ID from TOC (e.g., "sub-4.1", "title.nat") or "lines:100-200"'),
-      save_path: z.string().optional().describe('Save full document to file instead of returning content'),
+      save_path: z.string().optional().describe('Absolute file path for the full document. Relative paths are not supported.'),
     }),
   },
 ];

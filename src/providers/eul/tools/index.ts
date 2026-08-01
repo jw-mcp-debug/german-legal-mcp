@@ -25,7 +25,7 @@ export const eulTools: ToolDefinition[] = [
       celex: z.string().describe('CELEX number (e.g., "32016R0679", "32001L0029", "12016E267")'),
       language: z.string().optional().default('DE').describe('Language code (default: DE)'),
       section: z.string().optional().describe('Extract section: "Art. 5", "Artikel 5-10", "Kapitel III", or "lines:100-200"'),
-      save_path: z.string().optional().describe('Save full document to this file path instead of returning content'),
+      save_path: z.string().optional().describe('Absolute file path for the full document. Relative paths are not supported.'),
     }),
   },
 ];

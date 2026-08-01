@@ -74,7 +74,7 @@ export const risTools: ToolDefinition[] = [
       save_path: z
         .string()
         .optional()
-        .describe('Save the full document to this path instead of returning it inline.'),
+        .describe('Absolute file path for the requested section, or the full document when section is omitted. Relative paths are not supported.'),
     }),
   },
   {
@@ -106,7 +106,7 @@ export const risTools: ToolDefinition[] = [
         ])
         .optional()
         .describe('Required for application="landesrecht": which Bundesland.'),
-      save_path: z.string().optional().describe('Save to disk instead of returning inline.'),
+      save_path: z.string().optional().describe('Absolute file path for the norm. Relative paths are not supported.'),
     }),
   },
   {
@@ -137,7 +137,7 @@ export const risTools: ToolDefinition[] = [
         ])
         .optional()
         .describe('Required for application="landesrecht": which Bundesland.'),
-      save_path: z.string().optional().describe('Save the TOC to disk instead of returning inline.'),
+      save_path: z.string().optional().describe('Absolute file path for the TOC. Relative paths are not supported.'),
     }),
   },
 ];
