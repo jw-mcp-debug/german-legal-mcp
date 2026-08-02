@@ -1,6 +1,6 @@
 {
   "name": "@metaneutrons/german-legal-mcp",
-  "version": "2.2.3",
+  "version": "2.2.4",
   "description": "MCP server for German legal research",
   "main": "dist/index.js",
   "bin": {
@@ -23,7 +23,7 @@
   },
   "homepage": "https://github.com/metaneutrons/german-legal-mcp#readme",
   "scripts": {
-    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json && node scripts/write-build-id.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "start": "node dist/index.js",
     "dev": "tsc -p tsconfig.build.json --watch",

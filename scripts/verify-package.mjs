@@ -34,7 +34,7 @@ const forbidden = files.filter((path) =>
   || path.includes('/fixtures/')
   || path.startsWith('coverage/')
 );
-const required = ['dist/index.js', 'LICENSE', 'README.md'];
+const required = ['dist/index.js', 'dist/build-id.json', 'LICENSE', 'README.md'];
 const missing = required.filter((path) => !files.includes(path));
 
 if (forbidden.length > 0 || missing.length > 0) {

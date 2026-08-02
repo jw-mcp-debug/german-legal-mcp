@@ -30,6 +30,7 @@ A Model Context Protocol (MCP) server for German legal research, providing unifi
 
 ## Features
 
+
 ### Bundes- & Landesrecht (`legis:*` tools)
 
 - **Federal and state legislation** — BUND (all federal laws) + 16 Länder (all states)
@@ -173,6 +174,7 @@ or add your MCP client config (e.g., `claude_desktop_config.json`):
 
 ## Tools
 
+
 ### Bundes- & Landesrecht
 
 | Tool | Description |
@@ -243,7 +245,8 @@ All document tools use a two-phase approach to avoid flooding the LLM context:
 2. **Section** — request specific parts by Randnummer, heading, or line range (served from cache)
 3. **Save to file** — write full document to disk, return metadata only
 
-Section formats: `"Rn 5"`, `"Rn 5-12"`, `"lines:100-200"`, or any heading text (fuzzy match).
+Section formats: `"5"` or `"5-12"` (bare numbers mean Randnummern),
+`"Rn 5"`, `"Rn 5-12"`, `"lines:100-200"`, or any heading text (fuzzy match).
 
 `save_path` must always be an absolute file path. Relative paths are not supported because MCP server processes do not share the client's working directory. When a tool supports both `section` and `save_path`, the requested section is written to that file.
 
