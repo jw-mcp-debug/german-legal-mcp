@@ -74,18 +74,26 @@ export interface OgdEntscheidungstext {
 
 export interface OgdMetadaten {
   Technisch?: { ID?: string; Applikation?: string; Organ?: string };
-  Allgemein?: { DokumentUrl?: string };
+  Allgemein?: { DokumentUrl?: string; Geaendert?: string; Veroeffentlicht?: string };
   Bundesrecht?: {
     Kurztitel?: string;
     Titel?: string;
     Eli?: string;
-    BrKons?: { GesamteRechtsvorschriftUrl?: string };
+    BrKons?: {
+      GesamteRechtsvorschriftUrl?: string;
+      Inkrafttretensdatum?: string;
+      Ausserkrafttretensdatum?: string;
+    };
   };
   Landesrecht?: {
     Kurztitel?: string;
     Titel?: string;
     Bundesland?: string;
-    LrKons?: { GesamteRechtsvorschriftUrl?: string };
+    LrKons?: {
+      GesamteRechtsvorschriftUrl?: string;
+      Inkrafttretensdatum?: string;
+      Ausserkrafttretensdatum?: string;
+    };
   };
   Judikatur?: {
     Geschaeftszahl?: { item?: string | string[] };

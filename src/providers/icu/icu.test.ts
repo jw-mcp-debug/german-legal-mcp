@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { IcuConverter } from './converter.js';
+import { IcuUnavailableError } from './errors.js';
 
 describe('IcuConverter', () => {
   const converter = new IcuConverter();
@@ -105,6 +106,31 @@ describe('IcuProvider', () => {
     it('should handle search errors', async () => {
       mockPost.mockRejectedValueOnce(new Error('Network error'));
       await expect(icuProvider.handleToolCall('icu:search', { query: 'test' })).rejects.toThrow('Network error');
+    });
+
+    it('classifies Curia maintenance HTML returned as 403 as recoverable', async () => {
+      const error = Object.assign(new Error('Request failed with status code 403'), {
+        isAxiosError: true,
+        response: {
+          status: 403,
+          data: '<html><title>curia.europa.eu</title><body>The site is temporarily unavailable</body></html>',
+        },
+      });
+      mockPost.mockRejectedValueOnce(error);
+
+      await expect(icuProvider.handleToolCall('icu:search', { query: 'test' }))
+        .rejects.toBeInstanceOf(IcuUnavailableError);
+    });
+
+    it('does not classify an unrelated 403 as an InfoCuria outage', async () => {
+      const error = Object.assign(new Error('Request failed with status code 403'), {
+        isAxiosError: true,
+        response: { status: 403, data: '<html><body>Forbidden</body></html>' },
+      });
+      mockPost.mockRejectedValueOnce(error);
+
+      await expect(icuProvider.handleToolCall('icu:search', { query: 'test' }))
+        .rejects.toBe(error);
     });
   });
 

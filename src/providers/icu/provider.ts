@@ -6,6 +6,7 @@ import { IcuConverter } from './converter.js';
 import { validateConversion } from '../../shared/converter.js';
 import { saveToFile } from '../../shared/save-to-file.js';
 import { icuTools } from './tools/index.js';
+import { classifyIcuError } from './errors.js';
 
 const logger = rootLogger.child({ module: 'icu-provider' });
 
@@ -39,23 +40,31 @@ export class IcuProvider implements Provider {
     logger.info('ICU provider shutdown');
   }
 
+  private async request<T>(operation: () => Promise<T>): Promise<T> {
+    try {
+      return await operation();
+    } catch (error) {
+      throw classifyIcuError(error);
+    }
+  }
+
   private async handleSearch(args: Record<string, unknown>): Promise<ToolResult> {
     const { query, language = 'DE', limit = 10 } = args as { query: string; language?: string; limit?: number };
 
     logger.info('Searching InfoCuria', { query, language });
 
-    const response = await this.http.post(SEARCH_URL, {
-      searchTerm: query,
-      multiSearchTerms: [],
-      sortTermList: [{ sortDirection: 'DESC', sortTerm: 'ALL_DATES' }],
-      pagination: { pageNumber: 0, pageSize: limit, from: 1, to: limit * 2 },
-      language: language.toUpperCase(),
-      tabName: 'tout_jurisprudence',
-      isAllTabsRequest: false,
-      isSearchExact: true,
-      searchSources: ['document', 'metadata'],
-      ecli: '', publishedId: '', usualName: '', logicDocId: '',
-    }, { headers: HEADERS });
+    const response = await this.request(() => this.http.post(SEARCH_URL, {
+        searchTerm: query,
+        multiSearchTerms: [],
+        sortTermList: [{ sortDirection: 'DESC', sortTerm: 'ALL_DATES' }],
+        pagination: { pageNumber: 0, pageSize: limit, from: 1, to: limit * 2 },
+        language: language.toUpperCase(),
+        tabName: 'tout_jurisprudence',
+        isAllTabsRequest: false,
+        isSearchExact: true,
+        searchSources: ['document', 'metadata'],
+        ecli: '', publishedId: '', usualName: '', logicDocId: '',
+      }, { headers: HEADERS }));
 
     const hits = response.data.searchHits || [];
     const markdown = hits.map((hit: Record<string, Record<string, string>>, i: number) => {
@@ -86,10 +95,10 @@ export class IcuProvider implements Provider {
     const numericId = logicDocId.replace('id_', '');
     logger.info('Fetching document', { case_id, numericId, language });
 
-    const response = await this.http.get<string>(`${BLOB_URL}/${numericId}/${language.toUpperCase()}/html`, {
+    const response = await this.request(() => this.http.get<string>(`${BLOB_URL}/${numericId}/${language.toUpperCase()}/html`, {
       headers: { 'Origin': 'https://infocuria.curia.europa.eu' },
       responseType: 'text',
-    });
+    }));
 
     const markdown = this.converter.convert(response.data);
     validateConversion(markdown, 'InfoCuria');
@@ -140,7 +149,7 @@ export class IcuProvider implements Provider {
       body.publishedId = caseId;
     }
 
-    const response = await this.http.post(SEARCH_URL, body, { headers: HEADERS });
+    const response = await this.request(() => this.http.post(SEARCH_URL, body, { headers: HEADERS }));
     const hits = response.data.searchHits || [];
     const first = hits.at(0);
     if (first === undefined) return null;

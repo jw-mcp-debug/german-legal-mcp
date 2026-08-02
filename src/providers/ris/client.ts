@@ -119,7 +119,7 @@ export class RisClient {
       headers: { 'User-Agent': HTTP_USER_AGENT },
       timeout: REQUEST_TIMEOUT_MS,
     });
-    return parseSearch(res.data, 10);
+    return parseSearch(res.data, 10, true);
   }
 
   /**
@@ -152,7 +152,8 @@ export class RisClient {
       headers: { 'User-Agent': HTTP_USER_AGENT },
       timeout: REQUEST_TIMEOUT_MS,
     });
-    const ref = toArray(res.data?.OgdSearchResult?.OgdDocumentResults?.OgdDocumentReference)[0];
+    const refs = toArray(res.data?.OgdSearchResult?.OgdDocumentResults?.OgdDocumentReference);
+    const ref = selectCurrentNormReference(refs);
     const meta = ref?.Data?.Metadaten;
     const url =
       meta?.Bundesrecht?.BrKons?.GesamteRechtsvorschriftUrl ??
@@ -172,7 +173,7 @@ export class RisClient {
 }
 
 /** Parse an OGD search response into flattened hits (exported for testing). */
-export function parseSearch(data: OgdResponse, limit: number): RisSearchResult {
+export function parseSearch(data: OgdResponse, limit: number, currentNormFirst = false): RisSearchResult {
   if (!data) {
     throw new RisApiError('Empty or invalid response from the RIS API.');
   }
@@ -183,8 +184,42 @@ export function parseSearch(data: OgdResponse, limit: number): RisSearchResult {
   const results = data.OgdSearchResult?.OgdDocumentResults;
   const total = Number(results?.Hits?.['#text'] ?? 0);
   const page = Number(results?.Hits?.['@pageNumber'] ?? 1);
-  const hits = toArray(results?.OgdDocumentReference).slice(0, limit).map(toHit);
+  const refs = toArray(results?.OgdDocumentReference);
+  const orderedRefs = currentNormFirst ? orderCurrentNormReferences(refs) : refs;
+  const hits = orderedRefs.slice(0, limit).map(toHit);
   return { total, page, hits };
+}
+
+/**
+ * RIS returns historical and current consolidated paragraphs together. The
+ * API does not guarantee that the first result is the applicable version, so
+ * norm lookups must explicitly prefer an in-force version and then the latest
+ * effective version.
+ */
+export function selectCurrentNormReference(refs: OgdReference[]): OgdReference | undefined {
+  const today = new Date().toISOString().slice(0, 10);
+  return [...refs].sort((a, b) => normVersionScore(b, today) - normVersionScore(a, today))[0];
+}
+
+function orderCurrentNormReferences(refs: OgdReference[]): OgdReference[] {
+  const today = new Date().toISOString().slice(0, 10);
+  return [...refs].sort((a, b) => normVersionScore(b, today) - normVersionScore(a, today));
+}
+
+function normVersionScore(ref: OgdReference, today: string): number {
+  const meta = ref.Data?.Metadaten;
+  const version = meta?.Bundesrecht?.BrKons ?? meta?.Landesrecht?.LrKons;
+  const end = version?.Ausserkrafttretensdatum;
+  const inForce = !end || end >= today;
+  const effective = version?.Inkrafttretensdatum ?? '';
+  const changed = meta?.Allgemein?.Geaendert ?? '';
+  // Keep the current-version preference dominant over date ordering.
+  return (inForce ? 1_000_000_000_000 : 0) + dateScore(effective) / 1000 + dateScore(changed) / 1_000_000_000;
+}
+
+function dateScore(value: string): number {
+  const parsed = Date.parse(`${value}T00:00:00`);
+  return Number.isNaN(parsed) ? 0 : parsed;
 }
 
 function toHit(ref: OgdReference): RisSearchHit {

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { RisClient, parseSearch } from './client.js';
+import { RisClient, parseSearch, selectCurrentNormReference } from './client.js';
 import { toArray } from './types.js';
 import { RisApiError } from './errors.js';
 import type { OgdResponse } from './types.js';
@@ -183,6 +183,45 @@ describe('RisClient.search (request mapping, mocked transport)', () => {
 });
 
 describe('RisClient.getNorm', () => {
+  it('prefers the current consolidated version when RIS returns historical versions first', async () => {
+    const historical = {
+      Data: { Metadaten: {
+        Technisch: { ID: 'OLD', Applikation: 'BrKons' },
+        Bundesrecht: { Kurztitel: 'DSG', BrKons: {
+          Inkrafttretensdatum: '1980-01-01', Ausserkrafttretensdatum: '1999-12-31',
+        } },
+      } },
+    };
+    const current = {
+      Data: { Metadaten: {
+        Technisch: { ID: 'CURRENT', Applikation: 'BrKons' },
+        Allgemein: { Geaendert: '2024-04-05' },
+        Bundesrecht: { Kurztitel: 'DSG', BrKons: { Inkrafttretensdatum: '2014-01-01' } },
+      } },
+    };
+    const get = vi.fn().mockResolvedValue({
+      data: { OgdSearchResult: { OgdDocumentResults: {
+        Hits: { '#text': '2', '@pageNumber': '1' },
+        OgdDocumentReference: [historical, current],
+      } } },
+    });
+    const client = new RisClient({ get });
+
+    const result = await client.getNorm('bundesrecht', { law: 'DSG', paragraph: '1' });
+
+    expect(result.hits[0]?.id).toBe('CURRENT');
+  });
+
+  it('selects the current version for whole-law resolution as well', () => {
+    const refs = [
+      { Data: { Metadaten: { Bundesrecht: { BrKons: { Inkrafttretensdatum: '1980-01-01', Ausserkrafttretensdatum: '1999-12-31' } } } } },
+      { Data: { Metadaten: { Bundesrecht: { BrKons: { Inkrafttretensdatum: '2014-01-01' } } } } },
+    ];
+
+    expect(selectCurrentNormReference(refs)?.Data?.Metadaten?.Bundesrecht?.BrKons?.Inkrafttretensdatum)
+      .toBe('2014-01-01');
+  });
+
   it('federal: maps to BrKons + Abschnitt paragraph filter', async () => {
     const get = vi.fn().mockResolvedValue({ data: norm });
     const client = new RisClient({ get });
