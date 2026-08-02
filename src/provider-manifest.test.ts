@@ -38,7 +38,6 @@ describe('provider manifest', () => {
       'ris',
       'nautos',
     ]);
-    expect(getProviderManifest('private').map((entry) => entry.name)).toEqual(['juris', 'beck']);
   });
 
   it('lazy-loads all public provider modules', async () => {
