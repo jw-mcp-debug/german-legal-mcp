@@ -20,12 +20,32 @@ async function getSession(): Promise<BayernSession> {
   return session;
 }
 
-export async function searchBayern(query: string, limit: number): Promise<{ title: string; docId: string; subtitle: string }[]> {
+/**
+ * Bayern prints "2639 Treffer in 2608 Gerichtsentscheidungen". The first figure
+ * counts matches, the second distinct decisions; the decision count is the one
+ * that lines up with what the result list can actually return.
+ */
+export function parseBayernTotalHits(html: string): number | undefined {
+  const match = html.match(/([\d.]+)\s*Treffer\s+in\s+([\d.]+)\s*Gerichtsentscheidungen/)
+    ?? html.match(/([\d.]+)\s*Treffer/);
+  const raw = match?.[2] ?? match?.[1];
+  if (!raw) return undefined;
+  const total = Number.parseInt(raw.replace(/\./g, ''), 10);
+  return Number.isNaN(total) ? undefined : total;
+}
+
+export async function searchBayern(query: string, limit: number, page = 1): Promise<{ results: { title: string; docId: string; subtitle: string }[]; totalHits?: number }> {
   const s = await getSession();
-  const res = await axios.post<string>(`${BASE_URL}/Search`, `__RequestVerificationToken=${encodeURIComponent(s.token)}&SearchFields.Content=${encodeURIComponent(query)}`, {
-    headers: { Cookie: s.cookies, 'Content-Type': 'application/x-www-form-urlencoded' },
-    timeout: 15000,
-  });
+  // Page one is the POST result; later pages are GETs against the retained
+  // search, which is how the site's own pager works.
+  const res = page > 1
+    ? await axios.get<string>(`${BASE_URL}/Search/Page/${page}`, {
+      headers: { Cookie: s.cookies }, timeout: 15000,
+    })
+    : await axios.post<string>(`${BASE_URL}/Search`, `__RequestVerificationToken=${encodeURIComponent(s.token)}&SearchFields.Content=${encodeURIComponent(query)}`, {
+      headers: { Cookie: s.cookies, 'Content-Type': 'application/x-www-form-urlencoded' },
+      timeout: 15000,
+    });
 
   const $ = load(res.data);
   const results: { title: string; docId: string; subtitle: string }[] = [];
@@ -40,7 +60,8 @@ export async function searchBayern(query: string, limit: number): Promise<{ titl
     results.push({ title, docId, subtitle });
   });
 
-  return results.slice(0, limit);
+  const totalHits = parseBayernTotalHits(res.data);
+  return { results: results.slice(0, limit), ...(totalHits === undefined ? {} : { totalHits }) };
 }
 
 export async function fetchBayernDecision(docId: string): Promise<string> {

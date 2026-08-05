@@ -2,10 +2,19 @@ import axios, { type AxiosInstance } from 'axios';
 import * as cheerio from 'cheerio';
 import TurndownService from 'turndown';
 import { HTTP_USER_AGENT } from '../../../config.js';
-import type { DecisionAdapter, DecisionEntry, DecisionSearchResult } from '../types.js';
+import type { DecisionAdapter, DecisionEntry, DecisionPage, DecisionSearchResult } from '../types.js';
 import type { Element } from 'domhandler';
 
 const BASE = 'https://nrwesuche.justiz.nrw.de';
+
+/** NRW states its total in a dedicated element: "Es wurden <strong>20790</strong> Dokumente ... gefunden." */
+export function parseNrwTotalHits(html: string): number | undefined {
+  const text = cheerio.load(html)('#anzahlGefunden').text();
+  const match = text.match(/([\d.]+)/);
+  if (!match?.[1]) return undefined;
+  const total = Number.parseInt(match[1].replace(/\./g, ''), 10);
+  return Number.isNaN(total) ? undefined : total;
+}
 const turndown = new TurndownService({ headingStyle: 'atx' });
 
 interface NrwHit { url: string; title: string; court: string; kind: string; fileNumber: string; ecli: string; date: string; norms: string; headnotes: string; }
@@ -40,16 +49,25 @@ export class NRWDecisionAdapter implements DecisionAdapter {
   constructor(private readonly http: Pick<AxiosInstance, 'get' | 'post'> = axios) {}
 
   async search(_source: string, query: string, limit: number): Promise<DecisionSearchResult[]> {
+    return (await this.searchPage(_source, query, limit)).results;
+  }
+
+  async searchPage(_source: string, query: string, limit: number, page = 1): Promise<DecisionPage> {
     const params = new URLSearchParams({
       q: query, method: 'stem', qSize: String(limit), sortieren_nach: 'relevanz', advanced_search: 'false',
       absenden: 'Suchen', gerichtstyp: '', gerichtsbarkeit: '', gerichtsort: '', entscheidungsart: '', date: '',
       aktenzeichen: '', schlagwoerter: '', von: '', bis: '', validFrom: '', von2: '', bis2: '',
     });
+    // The pager is a row of submit buttons named page1..pageN; naming one picks
+    // that page.
+    if (page > 1) params.set(`page${page}`, String(page));
     const response = await this.http.post<string>(`${BASE}/index.php`, params.toString(), {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': HTTP_USER_AGENT },
     });
     const $ = cheerio.load(response.data);
-    return $('.einErgebnis').slice(0, limit).map((_, el) => toResult(parseHit(el, $))).get();
+    const results = $('.einErgebnis').slice(0, limit).map((_, el) => toResult(parseHit(el, $))).get();
+    const totalHits = parseNrwTotalHits(response.data);
+    return { results, ...(totalHits === undefined ? {} : { totalHits }) };
   }
 
   async get(_source: string, id: string): Promise<DecisionEntry> {

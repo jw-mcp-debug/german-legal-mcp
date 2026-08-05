@@ -2,7 +2,7 @@ import axios, { type AxiosInstance } from 'axios';
 import * as cheerio from 'cheerio';
 import TurndownService from 'turndown';
 import { HTTP_USER_AGENT } from '../../../config.js';
-import type { DecisionAdapter, DecisionEntry, DecisionSearchResult } from '../types.js';
+import type { DecisionAdapter, DecisionEntry, DecisionPage, DecisionSearchResult } from '../types.js';
 
 const BASE = 'https://gerichtsentscheidungen.brandenburg.de';
 const turndown = new TurndownService({ headingStyle: 'atx' });
@@ -13,13 +13,18 @@ export class BrandenburgDecisionAdapter implements DecisionAdapter {
   constructor(private readonly http: Pick<AxiosInstance, 'get'> = axios) {}
 
   async search(_source: string, query: string, limit: number): Promise<DecisionSearchResult[]> {
-    const response = await this.http.get<string>(`${BASE}/suche`, { params: { input_fulltext: query }, headers: { 'User-Agent': HTTP_USER_AGENT } });
+    return (await this.searchPage(_source, query, limit)).results;
+  }
+
+  async searchPage(_source: string, query: string, limit: number, page = 1): Promise<DecisionPage> {
+    const response = await this.http.get<string>(`${BASE}/suche`, { params: { input_fulltext: query, ...(page > 1 ? { page: String(page) } : {}) }, headers: { 'User-Agent': HTTP_USER_AGENT } });
     const $ = cheerio.load(response.data);
-    return $('#resultlist tbody tr').slice(0, limit).map((_, el) => {
+    const results = $('#resultlist tbody tr').slice(0, limit).map((_, el) => {
       const cells = $(el).find('td');
       const link = cells.eq(3).find('a');
       return { id: link.attr('href')?.split('/').pop() || '', title: link.text().replace(/\s+/g, ' ').trim(), subtitle: `${cells.eq(1).text().trim()} | ${cells.eq(4).text().replace(/\s+/g, ' ').trim()}`, date: cells.eq(2).text().trim(), court: cells.eq(4).text().replace(/\s+/g, ' ').trim() };
     }).get();
+    return { results };
   }
 
   async get(_source: string, id: string): Promise<DecisionEntry> {

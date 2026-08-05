@@ -6,11 +6,17 @@ import { validateConversion } from '../../shared/converter.js';
 import { saveToFile } from '../../shared/save-to-file.js';
 import { extractSection } from '../../shared/extract-section.js';
 import { riiTools } from './tools/index.js';
+import {
+  formatHitCount,
+  renderSearchTable,
+  type SearchFormat,
+} from '../../shared/search-format.js';
 import { RiiConverter } from './converter.js';
 import {
   createGermanDecisionAdapters,
   CaseLawClient,
 } from './client.js';
+import { clusterDecisions, describeClusters } from './cluster.js';
 import type { DecisionAdapter, SourcedDecisionSearchResult } from './types.js';
 
 const logger = rootLogger.child({ module: 'rii-provider' });
@@ -70,25 +76,99 @@ export class RiiProvider implements Provider {
     source: string,
     args: Record<string, unknown>,
   ): Promise<ToolResult> {
-    const { query, limit = 10 } = args as { query: string; limit?: number };
+    const { query, limit = 10, page = 1, format, include_snippets, collapse_duplicates = true } = args as {
+      query: string;
+      limit?: number;
+      page?: number;
+      format?: SearchFormat;
+      include_snippets?: boolean;
+      collapse_duplicates?: boolean;
+    };
     const batch = await this.client.searchDecisions(query, {
       sources: source === 'ALL' ? 'ALL' : [source],
       limit,
       limitPerSource: limit,
+      page,
     });
-    const markdown = batch.results
-      .map((result, index) => this.formatSearchResult(result, index))
-      .join('\n\n');
-    const failureNote = batch.failures.length > 0
-      ? `\n\nHinweis: ${batch.failures.length} Portal(e) konnten nicht abgefragt werden.`
-      : '';
-    const sourceNote = source === 'ALL'
-      ? ` from ${this.client.sources.length - batch.failures.length} portals`
-      : '';
+
+    const clusters = collapse_duplicates ? clusterDecisions(batch.results) : [];
+    const rows = collapse_duplicates
+      ? clusters.map((cluster) => cluster.representative)
+      : batch.results;
+
+    const perSource = new Map<string, number>();
+    for (const result of rows) {
+      perSource.set(result.source, (perSource.get(result.source) ?? 0) + 1);
+    }
+    // Sum only the totals actually reported, so the figure is a floor rather
+    // than a guess.
+    const totals = batch.totals ?? {};
+    const counted = Object.entries(totals);
+    const totalKnown = counted.length > 0
+      ? counted.reduce((sum, [, count]) => sum + count, 0)
+      : undefined;
+
+    // A portal can report a total yet win no row slots, since `limit` is shared
+    // across portals. Those still belong in the breakdown: leaving them out
+    // makes the headline total impossible to reconcile against the rows, and
+    // "6.296 matches, none shown" is exactly the cue to re-query that portal
+    // on its own.
+    const contributing = new Set([...perSource.keys(), ...Object.keys(totals)]);
+    const summary = [
+      counted.length > 0
+        ? `${formatHitCount(rows.length, totalKnown)} (totals reported by ${counted.length} of ${contributing.size} matching portals)`
+        : formatHitCount(rows.length),
+    ];
+    if (source === 'ALL') {
+      summary.push(
+        `${contributing.size} of ${this.client.sources.length} portals: `
+        + [...contributing]
+          .map((id) => {
+            const shown = perSource.get(id) ?? 0;
+            const total = totals[id];
+            return total === undefined ? `${id} ${shown}` : `${id} ${shown}/${total}`;
+          })
+          .join(' · '),
+      );
+    }
+    if (batch.failures.length > 0) {
+      summary.push(`${batch.failures.length} portal(s) unavailable: `
+        + batch.failures.map((failure) => failure.source).join(', '));
+    }
+    if (page > 1) summary.push(`Page ${page}.`);
+    // A source that cannot page says so, rather than quietly re-serving page 1.
+    if (batch.unpaged?.length) {
+      summary.push(`No page ${page} available from: ${batch.unpaged.join(', ')} `
+        + '(these sources expose only their first page).');
+    }
+    // Named, never silent: a collapsed series is a choice the caller can undo
+    // with collapse_duplicates: false.
+    summary.push(...describeClusters(clusters));
+
     return {
       content: [{
         type: 'text',
-        text: `Found ${batch.results.length}${source === 'ALL' ? ' consolidated' : ''} results${sourceNote}${batch.results.length > 0 ? `:\n\n${markdown}` : '.'}${failureNote}`,
+        text: renderSearchTable({
+          columns: [
+            { header: 'src', value: (result) => result.source },
+            { header: 'date', value: (result) => result.date },
+            { header: 'court', value: (result) => result.court },
+            { header: 'az', value: (result) => result.fileNumber },
+            { header: 'ecli', value: (result) => result.ecli },
+            { header: 'title', value: (result) => result.title, maxWidth: 120 },
+            { header: 'docId', value: (result) => result.id },
+            ...(include_snippets
+              ? [{
+                header: 'snippet',
+                value: (result: SourcedDecisionSearchResult) => result.snippet,
+                maxWidth: 200,
+              }]
+              : []),
+          ],
+          rows,
+          summary,
+          format: format ?? 'compact',
+        }),
       }],
     };
   }
@@ -128,10 +208,4 @@ export class RiiProvider implements Provider {
     return { content: [{ type: 'text', text: markdown }] };
   }
 
-  private formatSearchResult(
-    result: SourcedDecisionSearchResult,
-    index: number,
-  ): string {
-    return `${index + 1}. **${result.title}**\n   - Quelle: \`${result.source}\`\n   - Doc ID: \`${result.id}\`${result.subtitle ? `\n   - ${result.subtitle}` : ''}${result.snippet ? `\n   - ${result.snippet}` : ''}`;
-  }
 }

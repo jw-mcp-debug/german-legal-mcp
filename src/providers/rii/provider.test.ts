@@ -52,9 +52,86 @@ describe('RiiProvider', () => {
       { sources: ['SH'], search: async () => [{ id: 'same', title: 'VwVfG Entscheidung', subtitle: 'SH', date: '2024', court: 'VG', fileNumber: '1 A 1/24' }], get: vi.fn() },
     ];
     const provider = new RiiProvider(http(), new RiiConverter(), adapters);
-    await expect(provider.handleToolCall('rii:search', { query: 'VwVfG', source: 'ALL', limit: 10 })).resolves.toMatchObject({
-      content: [{ text: expect.stringMatching(/Found 2 consolidated results from 3 portals[\s\S]*Quelle: `BUND`[\s\S]*Quelle: `NW`[\s\S]*1 Portal/) }],
-    });
+    const search = await provider.handleToolCall('rii:search', { query: 'VwVfG', source: 'ALL', limit: 10 });
+    const text = (search.content[0] as { text: string }).text;
+    const rows = text.split('\n').slice(text.split('\n').indexOf('src\tdate\tcourt\taz\tecli\ttitle\tdocId') + 1);
+
+    // SH returns the same court+fileNumber as BUND and must be deduplicated away.
+    expect(rows).toHaveLength(2);
+    expect(rows.map((row) => row.split('\t')[0])).toEqual(['BUND', 'NW']);
+    // The unreachable portal is named rather than merely counted.
+    expect(text).toContain('1 portal(s) unavailable: BY');
+    expect(text).toContain('2 of 4 portals: BUND 1 · NW 1');
+
     await expect(provider.handleToolCall('rii:get_decision', { doc_id: 'same', source: 'ALL' })).resolves.toMatchObject({ isError: true });
+  });
+
+  it('asks each portal for its own page and names the ones that cannot page', async () => {
+    const pageable: DecisionAdapter = {
+      sources: ['BW'],
+      search: async () => [],
+      searchPage: async (_source, _query, _limit, page = 1) => ({
+        results: [{ id: `bw-p${page}`, title: `page ${page}`, subtitle: '', date: '01.01.2026' }],
+        totalHits: 903,
+      }),
+      get: vi.fn(),
+    };
+    // No searchPage at all: the client must not re-run its page-1 search.
+    const unpageable: DecisionAdapter = {
+      sources: ['HB'],
+      search: async () => [{ id: 'hb-1', title: 'Bremen only page', subtitle: '', date: '01.01.2026' }],
+      get: vi.fn(),
+    };
+    const provider = new RiiProvider(http(), new RiiConverter(), [pageable, unpageable]);
+
+    const first = (await provider.handleToolCall('rii:search', { query: 'x', source: 'ALL', limit: 5 })
+      .then((r) => (r.content[0] as { text: string }).text));
+    expect(first).toContain('bw-p1');
+    expect(first).toContain('hb-1');
+    expect(first).not.toContain('cannot page');
+
+    const second = (await provider.handleToolCall('rii:search', { query: 'x', source: 'ALL', limit: 5, page: 2 })
+      .then((r) => (r.content[0] as { text: string }).text));
+    expect(second).toContain('bw-p2');
+    // Bremen's single page must not reappear on page 2.
+    expect(second).not.toContain('hb-1');
+    expect(second).toContain('No page 2 available from: HB');
+  });
+
+  it('shares the page across portals instead of letting the first-registered one fill it', async () => {
+    // A single-term query scores every hit identically, so before the fair
+    // allocation the stable sort handed all ten slots to the first adapter.
+    // Each source's dates are disjoint and BUND's are the newest, so ranking
+    // alone would still hand every slot to BUND — this isolates the allocation
+    // from the date tie-break rather than letting the tie-break mask it.
+    const flood = (source: string, decade: number): DecisionAdapter => ({
+      sources: [source],
+      search: async () => Array.from({ length: 25 }, (_, index) => ({
+        id: `${source}-${index}`,
+        title: `Schadensersatz ${source} ${index}`,
+        subtitle: '',
+        date: `01.01.${decade + (24 - index)}`,
+      })),
+      get: vi.fn(),
+    });
+    const provider = new RiiProvider(http(), new RiiConverter(), [
+      flood('BUND', 2000), flood('NW', 1970), flood('BY', 1940),
+    ]);
+
+    // collapse_duplicates off: these fixtures differ only in a trailing number,
+    // so clustering would legitimately fold them and mask what is under test.
+    const result = await provider.handleToolCall('rii:search', {
+      query: 'Schadensersatz', source: 'ALL', limit: 9, collapse_duplicates: false,
+    });
+    const text = (result.content[0] as { text: string }).text;
+    const sources = text.split('\n')
+      .slice(text.split('\n').indexOf('src\tdate\tcourt\taz\tecli\ttitle\tdocId') + 1)
+      .map((row) => row.split('\t')[0]);
+
+    expect(sources).toHaveLength(9);
+    // Three each, not nine from BUND.
+    for (const source of ['BUND', 'NW', 'BY']) {
+      expect(sources.filter((value) => value === source)).toHaveLength(3);
+    }
   });
 });

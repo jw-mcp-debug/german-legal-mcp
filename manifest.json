@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "german-legal-mcp",
   "display_name": "German Legal MCP",
-  "version": "3.0.1",
+  "version": "3.1.0",
   "description": "German, Austrian and EU legal research: legislation, case law, parliamentary materials, preprints and standards — one MCP server; public sources need no subscription credentials.",
   "icon": "icon.png",
   "author": {
@@ -71,7 +71,7 @@
     { "name": "legis:get", "description": "Retrieve a specific law/norm from German federal or state legislation." },
     { "name": "legis:toc", "description": "Get the table of contents for a law — section numbers and headings." },
     { "name": "legis:states", "description": "List the German jurisdictions (BUND + 16 Bundesländer) and their backends." },
-    { "name": "rii:search", "description": "Search German federal court decisions (Rechtsprechung im Internet)." },
+    { "name": "rii:search", "description": "Search German federal and state court decisions across seventeen official portals, with paging and per-portal hit totals." },
     { "name": "rii:get_decision", "description": "Retrieve the full text of a court decision by document ID." },
     { "name": "ris:search", "description": "Search the Austrian Rechtsinformationssystem des Bundes (RIS)." },
     { "name": "ris:get", "description": "Retrieve a RIS document as Markdown (with surgical section retrieval)." },

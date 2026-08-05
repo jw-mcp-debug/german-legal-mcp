@@ -12,19 +12,20 @@ German, Austrian &amp; EU legal research — legislation, case law, parliamentar
 
 > **Production status**
 >
-> Version 3.0.0 provides production-ready provider contracts, application
-> components, MCP projections and public/private distributions. Third-party
-> portals remain external operational dependencies; scheduled live contracts
-> detect availability or response-shape drift. Subscription sources require
-> valid credentials, licences or institutional access.
+> Version 3.1.0 provides production-ready provider contracts, application
+> components, MCP projections and public/private distributions. Case-law search
+> pages through every source that supports one and reports each source's own hit
+> total. Third-party portals remain external operational dependencies; scheduled
+> live contracts detect availability or response-shape drift. Subscription
+> sources require valid credentials, licences or institutional access.
 
 A Model Context Protocol (MCP) server for German, Austrian and EU legal
 research, providing unified access to legislation, case law, parliamentary
 materials, literature, preprints and technical standards.
 
 The provider layer is also available as typed application components. Consumers
-do not need to run MCP or parse tool output. For example, FineRadar can consume
-normalized federal and Länder case law directly:
+do not need to run MCP or parse tool output — they can consume normalized
+federal and Länder case law directly:
 
 ```ts
 import {
@@ -265,7 +266,7 @@ or add your MCP client config (e.g., `claude_desktop_config.json`):
 
 | Tool | Description |
 |------|-------------|
-| `rii:search` | Search for court decisions. Returns list with doc IDs, titles, metadata and snippets. `source` supports `BUND`, `BY`, `NW`, `NI`, `BB`, `HB`, `SN`, the jPortal state codes `BW`, `BE`, `HH`, `MV`, `RP`, `SL`, `ST`, `SH`, `TH`, `HE`, or `ALL` for a parallel cross-portal search with deduplication. |
+| `rii:search` | Search for court decisions. `source` supports `BUND`, `BY`, `NW`, `NI`, `BB`, `HB`, `SN`, the jPortal state codes `BW`, `BE`, `HH`, `MV`, `RP`, `SL`, `ST`, `SH`, `TH`, `HE`, or `ALL` for a parallel cross-portal search. Note `BUND` is federal-only — state Arbeits-, Verwaltungs- and Oberlandesgerichte live in the state sources, so `ALL` is the right choice for a topic survey. With `ALL`, result slots are shared across the portals that matched and each portal's own hit total is reported. `page` pages every portal at once (BUND, HB and SN expose only their first page and say so); `collapse_duplicates` folds mass-litigation runs, naming what it folded. |
 | `rii:get_decision` | Retrieve full text by doc ID. `part`: K (Kurztext) or L (Langtext, default) for BUND; optional `save_path` is supported for every source. For NRW, use the URL returned by `rii:search`; for jPortal, use its `doc_id`. |
 
 ### RIS Österreich

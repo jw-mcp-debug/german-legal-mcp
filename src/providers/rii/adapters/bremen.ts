@@ -2,7 +2,7 @@ import axios, { type AxiosInstance } from 'axios';
 import * as cheerio from 'cheerio';
 import TurndownService from 'turndown';
 import { HTTP_USER_AGENT } from '../../../config.js';
-import type { DecisionAdapter, DecisionEntry, DecisionSearchResult } from '../types.js';
+import type { DecisionAdapter, DecisionEntry, DecisionPage, DecisionSearchResult } from '../types.js';
 
 const OVERVIEW = 'https://www.verwaltungsgericht.bremen.de/entscheidungen/entscheidungsuebersicht-13039';
 const turndown = new TurndownService({ headingStyle: 'atx' });
@@ -13,10 +13,20 @@ export class BremenDecisionAdapter implements DecisionAdapter {
   constructor(private readonly http: Pick<AxiosInstance, 'get'> = axios) {}
 
   async search(_source: string, query: string, limit: number): Promise<DecisionSearchResult[]> {
+    return (await this.searchPage(_source, query, limit)).results;
+  }
+
+  /**
+   * First page only, and that is the source's own limit rather than ours: the
+   * official index is a rolling list of recent VG decisions with no archive or
+   * pager to follow.
+   */
+  async searchPage(_source: string, query: string, limit: number, page = 1): Promise<DecisionPage> {
+    if (page > 1) return { results: [], pagingUnsupported: true };
     const response = await this.http.get<string>(OVERVIEW, { headers: { 'User-Agent': HTTP_USER_AGENT } });
     const $ = cheerio.load(response.data);
     const needle = query.toLocaleLowerCase('de-DE');
-    return $('tr.search-result').map((_, row) => {
+    const results = $('tr.search-result').map((_, row) => {
       const cells = $(row).find('td');
       const date = cells.eq(0).find('em').text().trim();
       const text = cells.eq(1).text().replace(/\s+/g, ' ').trim();
@@ -26,6 +36,7 @@ export class BremenDecisionAdapter implements DecisionAdapter {
       const url = href ? new URL(href, OVERVIEW).toString() : '';
       return { id: url, title, subtitle: text, date, court: 'Verwaltungsgericht Bremen', url };
     }).get().filter((result) => !needle || `${result.title} ${result.subtitle}`.toLocaleLowerCase('de-DE').includes(needle)).slice(0, limit);
+    return { results };
   }
 
   async get(_source: string, id: string): Promise<DecisionEntry> {

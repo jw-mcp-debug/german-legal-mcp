@@ -2,7 +2,7 @@ import axios, { type AxiosInstance } from 'axios';
 import * as cheerio from 'cheerio';
 import TurndownService from 'turndown';
 import { HTTP_USER_AGENT } from '../../../config.js';
-import type { DecisionAdapter, DecisionEntry, DecisionSearchResult } from '../types.js';
+import type { DecisionAdapter, DecisionEntry, DecisionPage, DecisionSearchResult } from '../types.js';
 
 const URL = 'https://www.justiz.sachsen.de/esamosplus/pages/suchen.aspx';
 const turndown = new TurndownService({ headingStyle: 'atx' });
@@ -46,14 +46,26 @@ export class SachsenDecisionAdapter implements DecisionAdapter {
   }
 
   async search(_source: string, query: string, limit: number): Promise<DecisionSearchResult[]> {
+    return (await this.searchPage(_source, query, limit)).results;
+  }
+
+  /**
+   * First page only. The result grid is an ASP.NET WebForms control driven by
+   * `__doPostBack` targets that are only rendered once a search has succeeded,
+   * and the upstream search endpoint has been answering 504 — so a pager
+   * cannot be confirmed, let alone relied on.
+   */
+  async searchPage(_source: string, query: string, limit: number, page = 1): Promise<DecisionPage> {
+    if (page > 1) return { results: [], pagingUnsupported: true };
     const submitted = await this.submit(query);
     const $ = cheerio.load(submitted.html);
     const needle = query.toLocaleLowerCase('de-DE');
-    return $('#DV16_Table tbody tr').map((_, row) => {
+    const results = $('#DV16_Table tbody tr').map((_, row) => {
       const cells = $(row).find('td'); const date = cells.eq(1).text().replace(/\s+/g, ' ').trim(); const fileNumber = cells.eq(2).text().replace(/\s+/g, ' ').trim(); const court = cells.eq(3).text().replace(/\s+/g, ' ').trim();
       const button = cells.eq(4).find('input[type="submit"]'); const name = button.attr('name') || ''; const value = button.attr('value') || ''; const snippet = cells.eq(2).find('[title]').attr('title')?.replace(/^Leitsatz:\s*/i, '') || '';
       return { id: encode({ query, name, value }), title: `${court} - ${fileNumber}`, subtitle: snippet, snippet, date, court, fileNumber };
     }).get().filter((result) => result.id.length > 10 && (!submitted.fallback || `${result.title} ${result.subtitle}`.toLocaleLowerCase('de-DE').includes(needle))).slice(0, limit);
+    return { results };
   }
 
   async get(_source: string, id: string): Promise<DecisionEntry> {

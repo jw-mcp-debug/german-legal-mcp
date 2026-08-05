@@ -160,11 +160,22 @@ export async function jportalSearch(
   });
 }
 
+/**
+ * Decision hits plus the portal's own total. `NUMBER_HITS` has always been part
+ * of the request; the response's `hits` field was simply never read, so a caller
+ * could not tell ten of ten from ten of 2.148.
+ */
+export interface JPortalDecisionPage {
+  results: JPortalSearchResult[];
+  totalHits?: number;
+}
+
 export async function jportalDecisionSearch(
   state: string,
   query: string,
   limit: number,
-): Promise<JPortalSearchResult[]> {
+  start = 1,
+): Promise<JPortalDecisionPage> {
   return withRetry(state, async (session) => {
     const response = await axios.post(
       `${baseUrl(session.domain)}/search`,
@@ -175,22 +186,27 @@ export async function jportalDecisionSearch(
         searches: [{ id: 'FastSearch', value: query }],
         filters: { CATEGORY: ['Rechtsprechung'] },
         searchTasks: {
-          RESULT_LIST: { start: 1, size: limit, sort: 'scoreR3' },
+          RESULT_LIST: { start, size: limit, sort: 'scoreR3' },
           NUMBER_HITS: {},
         },
       },
       { headers: sessionHeaders(session) },
     );
 
-    return (response.data.resultList || []).map((r: Record<string, unknown>) => ({
-      docId: r.docId as string,
-      title: ((r.titleList as string[]) || [])[0] || '',
-      subtitle: ((r.subtitleList as string[]) || []).join(' | '),
-      category: r.categoryId as string,
-      date: r.date as string,
-      docPart: r.docPart as string,
-      snippet: ((r.snippetList as string[][]) || []).flat().join(' '),
-    }));
+    const total = response.data.hits;
+    return {
+      results: (response.data.resultList || []).map((r: Record<string, unknown>) => ({
+        docId: r.docId as string,
+        title: ((r.titleList as string[]) || [])[0] || '',
+        subtitle: ((r.subtitleList as string[]) || []).join(' | '),
+        category: r.categoryId as string,
+        date: r.date as string,
+        docPart: r.docPart as string,
+        snippet: ((r.snippetList as string[][]) || []).flat().join(' '),
+      })),
+      // -1 is the portal's "not counted" marker, seen on the per-word `hits`.
+      ...(typeof total === 'number' && total >= 0 ? { totalHits: total } : {}),
+    };
   });
 }
 

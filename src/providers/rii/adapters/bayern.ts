@@ -1,8 +1,8 @@
-import type { DecisionAdapter, DecisionEntry, DecisionSearchResult } from '../types.js';
+import type { DecisionAdapter, DecisionEntry, DecisionPage, DecisionSearchResult } from '../types.js';
 import { searchBayern, fetchBayernDecision } from '../bayern/client.js';
 import { convertBayernDecision } from '../bayern/converter.js';
 
-interface BayernClient { search(query: string, limit: number): Promise<Array<{ title: string; docId: string; subtitle: string }>>; get(id: string): Promise<string>; }
+interface BayernClient { search(query: string, limit: number, page?: number): Promise<{ results: Array<{ title: string; docId: string; subtitle: string }>; totalHits?: number }>; get(id: string): Promise<string>; }
 
 export class BayernDecisionAdapter implements DecisionAdapter {
   readonly sources = ['BY'] as const;
@@ -10,7 +10,15 @@ export class BayernDecisionAdapter implements DecisionAdapter {
   constructor(private readonly client: BayernClient = { search: searchBayern, get: fetchBayernDecision }) {}
 
   async search(_source: string, query: string, limit: number): Promise<DecisionSearchResult[]> {
-    return (await this.client.search(query, limit)).map((r) => ({ id: r.docId, title: r.title, subtitle: r.subtitle, date: '' }));
+    return (await this.searchPage(_source, query, limit)).results;
+  }
+
+  async searchPage(_source: string, query: string, limit: number, page = 1): Promise<DecisionPage> {
+    const fetched = await this.client.search(query, limit, page);
+    return {
+      results: fetched.results.map((r) => ({ id: r.docId, title: r.title, subtitle: r.subtitle, date: '' })),
+      ...(fetched.totalHits === undefined ? {} : { totalHits: fetched.totalHits }),
+    };
   }
 
   async get(_source: string, id: string): Promise<DecisionEntry> {

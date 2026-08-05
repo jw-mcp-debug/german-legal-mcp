@@ -21,9 +21,9 @@ describe('rii bayern client', () => {
         + '<a class="hltitel" href="/Content/Document/NotY-1">ignored, not a decision</a>',
     });
 
-    const results = await searchBayern('mietrecht', 1);
+    const page = await searchBayern('mietrecht', 1);
 
-    expect(results).toEqual([
+    expect(page.results).toEqual([
       { title: 'BayObLG Beschluss', docId: 'Y-300-Z-BECKRS-2020-1', subtitle: 'Leitsatz hier' },
     ]);
     // The CSRF token + cookie from the session were sent with the search POST.

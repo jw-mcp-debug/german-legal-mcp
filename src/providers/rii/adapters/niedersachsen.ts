@@ -2,10 +2,21 @@ import axios, { type AxiosInstance } from 'axios';
 import * as cheerio from 'cheerio';
 import TurndownService from 'turndown';
 import { HTTP_USER_AGENT } from '../../../config.js';
-import type { DecisionAdapter, DecisionEntry, DecisionSearchResult } from '../types.js';
+import type { DecisionAdapter, DecisionEntry, DecisionPage, DecisionSearchResult } from '../types.js';
 
 const BASE = 'https://voris.wolterskluwer-online.de';
 const turndown = new TurndownService({ headingStyle: 'atx' });
+
+/**
+ * NI reports counts per facet rather than one overall figure. The search filters
+ * to Rechtsprechung, so that facet's own count is the matching total.
+ */
+export function parseNiedersachsenTotalHits(html: string): number | undefined {
+  const match = html.match(/Rechtsprechung Filter\s*(\d+)\s*Ergebnisse/);
+  if (!match?.[1]) return undefined;
+  const total = Number.parseInt(match[1], 10);
+  return Number.isNaN(total) ? undefined : total;
+}
 
 export class NiedersachsenDecisionAdapter implements DecisionAdapter {
   readonly sources = ['NI'] as const;
@@ -13,12 +24,16 @@ export class NiedersachsenDecisionAdapter implements DecisionAdapter {
   constructor(private readonly http: Pick<AxiosInstance, 'get'> = axios) {}
 
   async search(_source: string, query: string, limit: number): Promise<DecisionSearchResult[]> {
+    return (await this.searchPage(_source, query, limit)).results;
+  }
+
+  async searchPage(_source: string, query: string, limit: number, page = 1): Promise<DecisionPage> {
     const response = await this.http.get<string>(`${BASE}/search`, {
-      params: { query, pit: 'in_force', publicationtype: 'publicationform-ats-filter!ATS_Rechtsprechung' },
+      params: { query, pit: 'in_force', publicationtype: 'publicationform-ats-filter!ATS_Rechtsprechung', ...(page > 1 ? { page: String(page) } : {}) },
       headers: { 'User-Agent': HTTP_USER_AGENT },
     });
     const $ = cheerio.load(response.data);
-    return $('.egal-search-result-item-title h3 a[href^="/browse/document/"]').slice(0, limit).map((_, el) => {
+    const results = $('.egal-search-result-item-title h3 a[href^="/browse/document/"]').slice(0, limit).map((_, el) => {
       const item = $(el).closest('.views-row, .egal-search-result-item');
       const extra = item.find('.egal-search-result-item-extra').text().replace(/\s+/g, ' ').trim();
       const date = extra.match(/Entscheidungsdatum:\s*([\d.]+)/)?.[1] || '';
@@ -26,6 +41,8 @@ export class NiedersachsenDecisionAdapter implements DecisionAdapter {
       const court = title.match(/^([^,]+),/)?.[1];
       return { id: $(el).attr('href')?.split('/').pop() || '', title, subtitle: item.find('.egal-search-result-item-snippet').text().replace(/\s+/g, ' ').trim(), date, ...(court ? { court } : {}) };
     }).get();
+    const totalHits = parseNiedersachsenTotalHits(response.data);
+    return { results, ...(totalHits === undefined ? {} : { totalHits }) };
   }
 
   async get(_source: string, id: string): Promise<DecisionEntry> {

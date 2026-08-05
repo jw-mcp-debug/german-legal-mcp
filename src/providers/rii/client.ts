@@ -39,6 +39,8 @@ export interface CaseLawSearchOptions {
   sources?: readonly string[] | 'ALL';
   limit?: number;
   limitPerSource?: number;
+  /** 1-based. Each source is asked for its own page N, then results are pooled. */
+  page?: number;
 }
 
 export interface CaseLawClientConfiguration {
@@ -109,6 +111,7 @@ export class CaseLawClient implements LegalDataProvider<CaseLawReference> {
     options: CaseLawSearchOptions = {},
   ): Promise<DecisionSearchBatch> {
     const limit = Math.max(1, options.limit ?? 10);
+    const page = Math.max(1, options.page ?? 1);
     const limitPerSource = Math.max(1, options.limitPerSource ?? limit);
     const sources = options.sources === undefined || options.sources === 'ALL'
       ? this.sources
@@ -117,16 +120,26 @@ export class CaseLawClient implements LegalDataProvider<CaseLawReference> {
     const searches = sources.map(async (source) => {
       const adapter = this.adapterBySource.get(source);
       if (!adapter) throw new Error(`Unknown case-law source: ${source}`);
-      return {
-        source,
-        results: await adapter.search(source, query, limitPerSource),
-      };
+      // Prefer the paged call so a source that publishes its own total gets to
+      // report it; adapters without one fall back to the plain search.
+      const fetched = adapter.searchPage
+        ? await adapter.searchPage(source, query, limitPerSource, page)
+        : { results: page === 1 ? await adapter.search(source, query, limitPerSource) : [], pagingUnsupported: page > 1 };
+      return { source, ...fetched };
     });
     const settled = await Promise.allSettled(searches);
     const successful = settled.filter((item): item is PromiseFulfilledResult<{
       source: string;
       results: DecisionSearchResult[];
+      totalHits?: number;
+      pagingUnsupported?: boolean;
     }> => item.status === 'fulfilled');
+    const totals: Record<string, number> = {};
+    const unpaged: string[] = [];
+    for (const { value } of successful) {
+      if (value.totalHits !== undefined) totals[value.source] = value.totalHits;
+      if (value.pagingUnsupported) unpaged.push(value.source);
+    }
     const queryTerms = query
       .toLocaleLowerCase(this.configuration.locale)
       .split(/\s+/)
@@ -149,11 +162,23 @@ export class CaseLawClient implements LegalDataProvider<CaseLawReference> {
         seen.add(key);
         return true;
       })
-      .sort((a, b) => this.searchScore(b, queryTerms) - this.searchScore(a, queryTerms))
-      .slice(0, limit);
+      .sort((a, b) => {
+        const byScore = this.searchScore(b, queryTerms) - this.searchScore(a, queryTerms);
+        if (byScore !== 0) return byScore;
+        // searchScore only counts how many distinct query terms appear, so a
+        // single-term query scores every hit identically. Without a tie-break the
+        // stable sort then preserves adapter registration order, and the
+        // first-registered source takes every slot — the federal adapter returned
+        // all 25 of a 30-result "Schadensersatz" search that way, burying sixteen
+        // state portals that had matches. Recency is the defensible default for
+        // case law and is parsed by nearly every source.
+        return sortableDate(b.date).localeCompare(sortableDate(a.date));
+      });
 
     return {
-      results,
+      results: allocateFairly(results, limit),
+      ...(Object.keys(totals).length > 0 ? { totals } : {}),
+      ...(unpaged.length > 0 ? { unpaged } : {}),
       failures: settled.flatMap((result, index) => result.status === 'rejected'
         ? [{ source: sources[index] ?? 'unknown', error: result.reason }]
         : []),
@@ -272,4 +297,53 @@ export class CaseLawClient implements LegalDataProvider<CaseLawReference> {
     }
     return reference.provenance.sourceId.slice(prefix.length);
   }
+}
+
+/**
+ * `DD.MM.YYYY` and `YYYY-MM-DD` both occur across the seventeen sources. Normalize
+ * to a lexicographically sortable form; anything unparseable sorts last rather
+ * than winning by accident.
+ */
+function sortableDate(date: string): string {
+  const german = date.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+  if (german) return `${german[3]}-${german[2]}-${german[1]}`;
+  return /^\d{4}-\d{2}-\d{2}/.test(date) ? date.slice(0, 10) : '';
+}
+
+/**
+ * Fill `limit` slots by taking from each source in turn, so a single prolific
+ * source cannot consume the whole page.
+ *
+ * Ranking still decides the order *within* a source, and the interleave walks
+ * sources in descending order of their best-ranked hit, so the top result overall
+ * is preserved. Only the tail changes: instead of 25 federal decisions, a
+ * consolidated search returns the strongest few from each portal that matched.
+ */
+function allocateFairly(
+  ranked: readonly SourcedDecisionSearchResult[],
+  limit: number,
+): SourcedDecisionSearchResult[] {
+  const bySource = new Map<string, SourcedDecisionSearchResult[]>();
+  for (const result of ranked) {
+    const bucket = bySource.get(result.source);
+    if (bucket) bucket.push(result);
+    else bySource.set(result.source, [result]);
+  }
+
+  // Map iteration follows insertion order, which here is descending rank of each
+  // source's best hit — so round one emits the overall winner first.
+  const queues = [...bySource.values()];
+  const allocated: SourcedDecisionSearchResult[] = [];
+  for (let round = 0; allocated.length < limit; round++) {
+    let progressed = false;
+    for (const queue of queues) {
+      const next = queue[round];
+      if (next === undefined) continue;
+      allocated.push(next);
+      progressed = true;
+      if (allocated.length === limit) return allocated;
+    }
+    if (!progressed) break;
+  }
+  return allocated;
 }

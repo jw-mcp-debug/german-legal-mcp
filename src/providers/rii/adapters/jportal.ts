@@ -1,10 +1,10 @@
 import * as cheerio from 'cheerio';
 import TurndownService from 'turndown';
-import { jportalDecisionSearch, jportalGetDocument, JPORTAL_STATES, type JPortalSearchResult } from '../../../shared/clients/jportal.js';
-import type { DecisionAdapter, DecisionEntry, DecisionSearchResult } from '../types.js';
+import { jportalDecisionSearch, jportalGetDocument, JPORTAL_STATES, type JPortalDecisionPage, type JPortalSearchResult } from '../../../shared/clients/jportal.js';
+import type { DecisionAdapter, DecisionEntry, DecisionPage, DecisionSearchResult } from '../types.js';
 
 interface DecisionClient {
-  search(state: string, query: string, limit: number): Promise<JPortalSearchResult[]>;
+  search(state: string, query: string, limit: number, start?: number): Promise<JPortalDecisionPage>;
   get(state: string, id: string): Promise<{ title: string; head: string; text: string; permalink: string }>;
 }
 
@@ -37,7 +37,16 @@ export class JPortalDecisionAdapter implements DecisionAdapter {
   constructor(private readonly client: DecisionClient = { search: jportalDecisionSearch, get: jportalGetDocument }) {}
 
   async search(source: string, query: string, limit: number): Promise<DecisionSearchResult[]> {
-    return (await this.client.search(source, query, limit)).map(result);
+    return (await this.searchPage(source, query, limit)).results;
+  }
+
+  async searchPage(source: string, query: string, limit: number, page = 1): Promise<DecisionPage> {
+    // The R3 API takes a 1-based absolute offset, not a page number.
+    const fetched = await this.client.search(source, query, limit, (page - 1) * limit + 1);
+    return {
+      results: fetched.results.map(result),
+      ...(fetched.totalHits === undefined ? {} : { totalHits: fetched.totalHits }),
+    };
   }
 
   async get(source: string, id: string): Promise<DecisionEntry> {
