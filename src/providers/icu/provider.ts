@@ -6,25 +6,22 @@ import { IcuConverter } from './converter.js';
 import { validateConversion } from '../../shared/converter.js';
 import { saveToFile } from '../../shared/save-to-file.js';
 import { icuTools } from './tools/index.js';
-import { classifyIcuError } from './errors.js';
+import { IcuDataClient } from './data-client.js';
 
 const logger = rootLogger.child({ module: 'icu-provider' });
 
-const SEARCH_URL = 'https://infocuriaws.curia.europa.eu/elastic-connector/search';
-const BLOB_URL = 'https://infocuriaws.curia.europa.eu/blob/download-file';
-const HEADERS = {
-  'Content-Type': 'application/json; charset=utf-8',
-  'Accept': 'application/json',
-  'Origin': 'https://infocuria.curia.europa.eu',
-};
-
 export class IcuProvider implements Provider {
   readonly name = 'icu';
+  private readonly client: IcuDataClient;
 
   constructor(
-    private readonly http: Pick<AxiosInstance, 'get' | 'post'> = axios,
-    private readonly converter: IcuConverter = new IcuConverter(),
-  ) {}
+    clientOrHttp: IcuDataClient | Pick<AxiosInstance, 'get' | 'post'> = axios,
+    converter: IcuConverter = new IcuConverter(),
+  ) {
+    this.client = clientOrHttp instanceof IcuDataClient
+      ? clientOrHttp
+      : new IcuDataClient(clientOrHttp, converter);
+  }
 
   getTools(): ToolDefinition[] {
     return icuTools;
@@ -40,35 +37,13 @@ export class IcuProvider implements Provider {
     logger.info('ICU provider shutdown');
   }
 
-  private async request<T>(operation: () => Promise<T>): Promise<T> {
-    try {
-      return await operation();
-    } catch (error) {
-      throw classifyIcuError(error);
-    }
-  }
-
   private async handleSearch(args: Record<string, unknown>): Promise<ToolResult> {
     const { query, language = 'DE', limit = 10 } = args as { query: string; language?: string; limit?: number };
 
     logger.info('Searching InfoCuria', { query, language });
 
-    const response = await this.request(() => this.http.post(SEARCH_URL, {
-        searchTerm: query,
-        multiSearchTerms: [],
-        sortTermList: [{ sortDirection: 'DESC', sortTerm: 'ALL_DATES' }],
-        pagination: { pageNumber: 0, pageSize: limit, from: 1, to: limit * 2 },
-        language: language.toUpperCase(),
-        tabName: 'tout_jurisprudence',
-        isAllTabsRequest: false,
-        isSearchExact: true,
-        searchSources: ['document', 'metadata'],
-        ecli: '', publishedId: '', usualName: '', logicDocId: '',
-      }, { headers: HEADERS }));
-
-    const hits = response.data.searchHits || [];
-    const markdown = hits.map((hit: Record<string, Record<string, string>>, i: number) => {
-      const c = hit.content ?? {};
+    const response = await this.client.searchCaseLaw(query, language, limit);
+    const markdown = response.hits.map((c, i) => {
       return `${i + 1}. **${c.docType}, ${c.docDate}, ${c.idPublished}**\n` +
         `   - ECLI: ${c.ecli || 'n/a'}\n` +
         `   - CELEX: \`${c.celex}\`\n` +
@@ -77,7 +52,7 @@ export class IcuProvider implements Provider {
     }).join('\n\n');
 
     return {
-      content: [{ type: 'text', text: `Found ${response.data.totalHits} results (showing ${hits.length}):\n\n${markdown}` }],
+      content: [{ type: 'text', text: `Found ${response.totalHits} results (showing ${response.hits.length}):\n\n${markdown}` }],
     };
   }
 
@@ -87,20 +62,13 @@ export class IcuProvider implements Provider {
     };
 
     // Resolve case_id to logicDocId via search
-    const logicDocId = await this.resolveLogicDocId(case_id, language as string);
-    if (!logicDocId) {
+    const result = await this.client.getCaseLaw(case_id, language as string);
+    if (!result) {
       return { content: [{ type: 'text', text: `No document found for "${case_id}" in ${language}` }], isError: true };
     }
 
-    const numericId = logicDocId.replace('id_', '');
-    logger.info('Fetching document', { case_id, numericId, language });
-
-    const response = await this.request(() => this.http.get<string>(`${BLOB_URL}/${numericId}/${language.toUpperCase()}/html`, {
-      headers: { 'Origin': 'https://infocuria.curia.europa.eu' },
-      responseType: 'text',
-    }));
-
-    const markdown = this.converter.convert(response.data);
+    logger.info('Fetching document', { case_id, logicDocId: result.logicDocId, language });
+    const markdown = result.markdown;
     validateConversion(markdown, 'InfoCuria');
 
     // Section extraction
@@ -119,41 +87,6 @@ export class IcuProvider implements Provider {
     }
 
     return { content: [{ type: 'text', text: fullDoc }] };
-  }
-
-  private async resolveLogicDocId(caseId: string, language: string): Promise<string | null> {
-    // If already a logicDocId (id_123456)
-    if (caseId.startsWith('id_')) return caseId;
-
-    // If numeric, assume it's the numeric part
-    if (/^\d+$/.test(caseId)) return `id_${caseId}`;
-
-    // Search by publishedId (e.g., "C-476/17") or CELEX
-    const isCelex = /^\d{5}[A-Z]{2}\d+$/.test(caseId);
-    const body: Record<string, unknown> = {
-      searchTerm: isCelex ? '' : '',
-      multiSearchTerms: [],
-      sortTermList: [{ sortDirection: 'DESC', sortTerm: 'ALL_DATES' }],
-      pagination: { pageNumber: 0, pageSize: 1, from: 1, to: 2 },
-      language: language.toUpperCase(),
-      tabName: 'tout_jurisprudence',
-      isAllTabsRequest: false,
-      isSearchExact: true,
-      searchSources: ['document', 'metadata'],
-      ecli: '', publishedId: '', usualName: '', logicDocId: '',
-    };
-
-    if (isCelex) {
-      body.searchTerm = caseId;
-    } else {
-      body.publishedId = caseId;
-    }
-
-    const response = await this.request(() => this.http.post(SEARCH_URL, body, { headers: HEADERS }));
-    const hits = response.data.searchHits || [];
-    const first = hits.at(0);
-    if (first === undefined) return null;
-    return first.content?.logicDocId || null;
   }
 
   private extractSection(markdown: string, section: string): string | null {

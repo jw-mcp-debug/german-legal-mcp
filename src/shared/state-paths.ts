@@ -41,8 +41,6 @@ export const METRICS_DIR = join(STATE_DIR, 'metrics');
 export const SOCKET_DIR = join(STATE_DIR, 'sockets');
 export const LOCK_DIR = join(STATE_DIR, 'locks');
 
-/** Pre-Phase-2 locations retained only for one-way state migration. */
-
 export function statePath(...segments: string[]): string {
   return join(STATE_DIR, ...segments);
 }

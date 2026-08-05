@@ -1,9 +1,9 @@
 import { saveToFile } from '../../../shared/save-to-file.js';
-import type { DipClient } from '../client.js';
+import type { DipDataClient } from '../data-client.js';
 import type { ToolResult } from '../../../shared/types.js';
 import { extractSection } from '../../../shared/extract-section.js';
 
-export async function handleGet(client: DipClient, args: Record<string, unknown>): Promise<ToolResult> {
+export async function handleGet(client: DipDataClient, args: Record<string, unknown>): Promise<ToolResult> {
   const { dokumentnummer, section, save_path } = args as {
     dokumentnummer: string; section?: string; save_path?: string;
   };

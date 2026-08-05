@@ -79,6 +79,32 @@ describe('giiGetLegislation', () => {
 
     await expect(giiGetLegislation('BGB', '99999')).rejects.toThrow('Legislation not found');
   });
+
+  it('points to a subscription-provider fallback on 404', async () => {
+    const giiGetLegislation = await getGii();
+    const error: any = new Error('Not Found');
+    error.isAxiosError = true;
+    error.response = { status: 404 };
+    mockGet.mockRejectedValueOnce(error);
+
+    // Deliberately provider-agnostic: naming the private provider here would
+    // leak it into the public distribution, which ships this client and test.
+    await expect(giiGetLegislation('BGB', '99999'))
+      .rejects.toThrow('subscription provider');
+  });
+
+  it('resolves BtMG through its aliased gesetze-im-internet.de slug', async () => {
+    const giiGetLegislation = await getGii();
+    mockGet.mockResolvedValueOnce({
+      data: Buffer.from('<html><body><div class="jnhtml"></div></body></html>', 'latin1'),
+    } as any);
+
+    await giiGetLegislation('btmg', '29');
+    expect(mockGet).toHaveBeenCalledWith(
+      'https://www.gesetze-im-internet.de/btmg_1981/__29.html',
+      expect.any(Object),
+    );
+  });
 });
 
 // --- jportal Client Tests ---

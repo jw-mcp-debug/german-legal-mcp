@@ -1,5 +1,6 @@
 import { saveToFile } from '../../../shared/save-to-file.js';
-import type { NautosClient, TocSection } from '../client.js';
+import type { TocSection } from '../client.js';
+import type { NautosDataClient } from '../data-client.js';
 import type { ToolResult } from '../../../shared/types.js';
 import * as cache from '../cache.js';
 import { htmlToMarkdown } from '../converter.js';
@@ -15,7 +16,7 @@ function formatToc(sections: TocSection[], depth = 0): string {
   }).join('\n');
 }
 
-async function fetchAndCache(client: NautosClient, acCode: string): Promise<cache.CachedDocument> {
+async function fetchAndCache(client: NautosDataClient, acCode: string): Promise<cache.CachedDocument> {
   const detail = await client.getDetail(acCode);
   if (!detail.din21Id) throw new Error(`No fulltext available for ${acCode} (format: ${detail.format ?? 'unknown'})`);
   const toc = await client.getToc(detail.din21Id);
@@ -36,7 +37,7 @@ function formatOutline(doc: cache.CachedDocument): string {
   return `${header}\n\n## Inhaltsverzeichnis\n\n${formatToc(doc.toc)}\n\n---\n*Use \`section\` parameter with a section ID (e.g. \`sub-4.1\`) to fetch content.*`;
 }
 
-async function fetchAllSections(client: NautosClient, doc: cache.CachedDocument): Promise<string> {
+async function fetchAllSections(client: NautosDataClient, doc: cache.CachedDocument): Promise<string> {
   const allIds = flattenSectionIds(doc.toc);
   const parts: string[] = [
     formatOutline(doc).split('## Inhaltsverzeichnis')[0]?.trim() ?? '',
@@ -63,7 +64,7 @@ function flattenSectionIds(sections: TocSection[]): string[] {
   return ids;
 }
 
-export async function handleGetDocument(client: NautosClient, args: Record<string, unknown>): Promise<ToolResult> {
+export async function handleGetDocument(client: NautosDataClient, args: Record<string, unknown>): Promise<ToolResult> {
   const { acCode, section, save_path } = args as { acCode: string; section?: string; save_path?: string };
 
   let doc = await cache.get(acCode);

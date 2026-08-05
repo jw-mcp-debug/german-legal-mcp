@@ -9,6 +9,7 @@ export interface SearchResult {
   title: string;
   subtitle: string;
   date: string;
+  url?: string;
 }
 
 export interface LegisEntry {

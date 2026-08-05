@@ -44,6 +44,27 @@ interface JwtSession {
 
 let session: JwtSession | null = null;
 
+export interface NautosAuthenticationSnapshot {
+  readonly authenticated: boolean;
+  readonly expiresAt?: number;
+}
+
+export function getNautosAuthenticationSnapshot(): NautosAuthenticationSnapshot {
+  if (!session || isExpired()) return { authenticated: false };
+  return { authenticated: true, expiresAt: session.exp };
+}
+
+export async function refreshNautosAuthentication(): Promise<NautosAuthenticationSnapshot> {
+  session = null;
+  const refreshed = await login();
+  return { authenticated: true, expiresAt: refreshed.exp };
+}
+
+export function clearNautosAuthentication(): void {
+  session = null;
+  viewerAuthCache.clear();
+}
+
 function isExpired(): boolean {
   if (!session) return true;
   return Date.now() / 1000 > session.exp - 300; // 5min buffer

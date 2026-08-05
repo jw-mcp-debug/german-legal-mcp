@@ -104,9 +104,9 @@ const transport = pino.transport({ targets });
 const logger = pino({ level, redact: LOG_REDACT_CONFIG }, transport);
 
 export type LogContext = {
-  /** Provider namespace, e.g. `beck`, `juris`. */
+  /** Provider namespace, e.g. `ris`, `legis`. */
   provider?: string;
-  /** Module or component within a provider, e.g. `beck-stats`. */
+  /** Module or component within a provider, e.g. `ris-provider`. */
   module?: string;
   /** Correlates all log lines of one logical request across processes. */
   requestId?: string | undefined;

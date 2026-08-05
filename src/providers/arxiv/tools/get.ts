@@ -1,18 +1,15 @@
 import { saveToFile } from '../../../shared/save-to-file.js';
-import type { ArxivClient } from '../client.js';
+import type { ArxivDataClient } from '../data-client.js';
 import type { ToolResult } from '../../../shared/types.js';
 import { htmlToMarkdown } from '../converter.js';
 import { extractSection } from '../../../shared/extract-section.js';
 
-export async function handleGet(client: ArxivClient, args: Record<string, unknown>): Promise<ToolResult> {
+export async function handleGet(client: ArxivDataClient, args: Record<string, unknown>): Promise<ToolResult> {
   const { id, section, save_path } = args as { id: string; section?: string; save_path?: string };
 
   // Always fetch metadata from Atom API
-  const { entries } = await client.search({ id_list: id, max_results: 1 });
-  if (!entries.length) return { content: [{ type: 'text', text: `Paper ${id} not found.` }], isError: true };
-
-  const entry = entries.at(0);
-  if (entry === undefined) {
+  const entry = await client.getEntry(id);
+  if (entry === null) {
     return { content: [{ type: 'text', text: `Paper ${id} not found.` }], isError: true };
   }
   const header = [

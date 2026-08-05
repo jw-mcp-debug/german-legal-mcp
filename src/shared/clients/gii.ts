@@ -22,8 +22,20 @@ export interface GiiResult {
   next: string | null;
 }
 
+/**
+ * gesetze-im-internet.de usually hosts a law under its lowercase abbreviation,
+ * but some laws that were later reissued/renumbered keep the original
+ * promulgation year in their slug instead (e.g. BtMG -> "btmg_1981"). There is
+ * no generic way to derive this from the abbreviation, so known mismatches
+ * are aliased here as they're discovered.
+ */
+const LAW_SLUG_ALIASES: Record<string, string> = {
+  btmg: 'btmg_1981',
+};
+
 export async function giiGetLegislation(law: string, section: string): Promise<GiiResult> {
-  const lawNorm = law.toLowerCase();
+  const lawLower = law.toLowerCase();
+  const lawNorm = LAW_SLUG_ALIASES[lawLower] ?? lawLower;
 
   let sectionNorm = section.trim();
   sectionNorm = sectionNorm.replace(/^(§|Paragraph|Para\.?|Art\.?)\s*/i, '');
@@ -65,7 +77,14 @@ export async function giiGetLegislation(law: string, section: string): Promise<G
     };
   } catch (error) {
     if (axios.isAxiosError(error) && error.response?.status === 404) {
-      throw new Error(`Legislation not found: ${law} ${section}`, { cause: error });
+      throw new Error(
+        `Legislation not found: ${law} ${section} (tried ${url}). ` +
+        'Either this abbreviation does not match gesetze-im-internet.de\'s URL slug — some reissued laws ' +
+        'use a different slug than their common abbreviation, which cannot be resolved from the ' +
+        'abbreviation alone — or this section number does not exist in the law. ' +
+        'A subscription provider that resolves abbreviations through its own index may still find it.',
+        { cause: error },
+      );
     }
     throw error;
   }

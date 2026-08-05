@@ -1,4 +1,5 @@
-import type { ArxivClient, ArxivEntry } from '../client.js';
+import type { ArxivEntry } from '../client.js';
+import type { ArxivDataClient } from '../data-client.js';
 import type { ToolResult } from '../../../shared/types.js';
 
 function formatEntry(e: ArxivEntry): string {
@@ -13,7 +14,7 @@ function formatEntry(e: ArxivEntry): string {
   return lines.join('\n');
 }
 
-export async function handleSearch(client: ArxivClient, args: Record<string, unknown>): Promise<ToolResult> {
+export async function handleSearch(client: ArxivDataClient, args: Record<string, unknown>): Promise<ToolResult> {
   const { query, limit = 10, start = 0, sort_by } = args as {
     query: string; limit?: number; start?: number; sort_by?: string;
   };
@@ -21,7 +22,7 @@ export async function handleSearch(client: ArxivClient, args: Record<string, unk
   const params: Record<string, string | number> = { search_query: query, max_results: limit, start };
   if (sort_by) params.sortBy = sort_by;
 
-  const { total, entries } = await client.search(params);
+  const { total, entries } = await client.searchEntries(params);
   const text = `${total} Treffer (showing ${entries.length})\n\n${entries.map(formatEntry).join('\n\n---\n\n')}`;
   return { content: [{ type: 'text', text }] };
 }

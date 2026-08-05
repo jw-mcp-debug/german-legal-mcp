@@ -4,6 +4,7 @@ import { validateConversion } from '../../shared/converter.js';
 import { extractSection } from '../../shared/extract-section.js';
 import { saveToFile } from '../../shared/save-to-file.js';
 import { RisClient } from './client.js';
+import { RisDataClient } from './data-client.js';
 import { risHtmlToMarkdown } from './converter.js';
 import { parseToc } from './toc.js';
 import { DiskTocCache, type RisTocCache } from './toc-cache.js';
@@ -30,11 +31,16 @@ function deriveHtmlUrl(applikation: string, id: string): string {
 
 export class RisProvider implements Provider {
   readonly name = 'ris';
+  private readonly client: RisDataClient;
 
   constructor(
-    private readonly client: RisClient = new RisClient(),
+    client: RisDataClient | RisClient = new RisDataClient(),
     private readonly tocCache: RisTocCache = new DiskTocCache(),
-  ) {}
+  ) {
+    this.client = client instanceof RisDataClient
+      ? client
+      : new RisDataClient(client);
+  }
 
   getTools(): ToolDefinition[] {
     return risTools;
@@ -70,7 +76,7 @@ export class RisProvider implements Provider {
     };
 
     logger.info('Searching', { application, query, sort, bundesland });
-    const result = await this.client.search(application, { query, court, bundesland, sort, limit });
+    const result = await this.client.searchRis(application, { query, court, bundesland, sort, limit });
 
     if (result.hits.length === 0) {
       return { content: [{ type: 'text', text: `No RIS results for "${query}" in ${application}.` }] };

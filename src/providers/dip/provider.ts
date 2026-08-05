@@ -1,5 +1,6 @@
 import type { Provider, ToolDefinition, ToolResult } from '../../shared/types.js';
 import { DipClient } from './client.js';
+import { DipDataClient } from './data-client.js';
 import { dipTools } from './tools/index.js';
 import { handleSearch } from './tools/search.js';
 import { handleGet } from './tools/get.js';
@@ -8,8 +9,13 @@ import { handleSearchPlenarprotokoll } from './tools/plenarprotokoll.js';
 
 export class DipProvider implements Provider {
   readonly name = 'dip';
+  private readonly client: DipDataClient;
 
-  constructor(private readonly client: DipClient = new DipClient()) {}
+  constructor(client: DipDataClient | DipClient = new DipDataClient()) {
+    this.client = client instanceof DipDataClient
+      ? client
+      : new DipDataClient(client);
+  }
 
   getTools(): ToolDefinition[] { return dipTools; }
 

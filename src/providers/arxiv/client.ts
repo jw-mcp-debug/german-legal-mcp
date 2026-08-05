@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { load } from 'cheerio';
+import { HTTP_USER_AGENT } from '../../config.js';
 import { arxivConfig } from './config.js';
 
 export interface ArxivEntry {
@@ -20,13 +21,22 @@ export interface ArxivEntry {
 
 export class ArxivClient {
   async search(params: Record<string, string | number>): Promise<{ total: number; entries: ArxivEntry[] }> {
-    const { data } = await axios.get<string>(arxivConfig.apiUrl, { params, timeout: 30000 });
+    // arXiv's API terms ask callers to identify themselves; every other client
+    // in this project already does, and a generic library UA invites throttling.
+    const { data } = await axios.get<string>(arxivConfig.apiUrl, {
+      params,
+      timeout: 30000,
+      headers: { 'User-Agent': HTTP_USER_AGENT },
+    });
     return this.parseAtom(data);
   }
 
   async getHtml(arxivId: string): Promise<string | null> {
     try {
-      const { data } = await axios.get<string>(`${arxivConfig.htmlUrl}/${arxivId}`, { timeout: 30000 });
+      const { data } = await axios.get<string>(`${arxivConfig.htmlUrl}/${arxivId}`, {
+        timeout: 30000,
+        headers: { 'User-Agent': HTTP_USER_AGENT },
+      });
       return data;
     } catch {
       return null;

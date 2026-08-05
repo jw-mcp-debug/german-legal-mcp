@@ -6,7 +6,7 @@
  * therefore goes through `toArray` to normalise the single-vs-many ambiguity.
  */
 
-/** RIS applications exposed by this provider: federal & state consolidated law, plus case law. */
+/** Broad RIS federal/state legislation collections plus the case-law collection. */
 export type RisApplication = 'bundesrecht' | 'landesrecht' | 'judikatur';
 
 /** Result ordering. `date` = newest first (server-side sort by Datum, descending). */
@@ -36,7 +36,14 @@ export interface RisSearchHit {
   organ?: string | undefined;
   /** Decision date, Judikatur only. */
   date?: string | undefined;
+  /** Court file number(s), Judikatur only. */
+  fileNumber?: string | undefined;
   ecli?: string | undefined;
+  /** European Legislation Identifier, consolidated law only. */
+  eli?: string | undefined;
+  validFrom?: string | undefined;
+  validTo?: string | undefined;
+  publicationDate?: string | undefined;
   /** Austrian Bundesland, for Landesrecht hits (Metadaten.Landesrecht.Bundesland). */
   bundesland?: string | undefined;
   /** Canonical human/permalink URL (Metadaten.Allgemein.DokumentUrl). */
@@ -88,6 +95,7 @@ export interface OgdMetadaten {
   Landesrecht?: {
     Kurztitel?: string;
     Titel?: string;
+    Eli?: string;
     Bundesland?: string;
     LrKons?: {
       GesamteRechtsvorschriftUrl?: string;

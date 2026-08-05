@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import type {
   Provider,
-  ProviderManifestEntry,
   ToolDefinition,
 } from './shared/types.js';
+import type { ProviderComponentReference } from './contracts/provider-component.js';
 import { ProviderRegistry } from './provider-registry.js';
 import { ConfigurationError } from './config.js';
 
@@ -22,20 +22,37 @@ function fixtureProvider(name: string): Provider {
   };
 }
 
-function manifestEntry(name: string, provider: Provider | null): ProviderManifestEntry {
+function manifestEntry(name: string, provider: Provider | null): ProviderComponentReference {
   return {
-    name,
-    description: name,
+    id: name,
     distribution: 'public',
-    enablementVariables: [],
-    capabilities: {
-      browser: false,
-      cache: false,
-      daemon: false,
-      search: true,
-      documents: false,
-    },
-    load: async () => ({ createProvider: () => provider }),
+    load: async () => ({
+      component: {
+        metadata: {
+          id: name,
+          description: name,
+          distribution: 'public',
+          access: 'public',
+          resourceTypes: ['case-law'],
+          enablementVariables: [],
+          runtime: {
+            browser: false,
+            cache: false,
+            daemon: false,
+            search: true,
+            documents: false,
+            tableOfContents: false,
+            authentication: false,
+            status: false,
+          },
+        },
+        createMcpProvider: () => provider,
+        createDataClient: () => ({
+          search: vi.fn(async () => ({ results: [], failures: [] })),
+          get: vi.fn(async () => { throw new Error('not implemented'); }),
+        }),
+      },
+    }),
   };
 }
 
@@ -72,11 +89,35 @@ describe('ProviderRegistry', () => {
 
   it('disables a misconfigured provider without aborting the others', async () => {
     const good = fixtureProvider('good');
-    const badEntry: ProviderManifestEntry = {
+    const badEntry: ProviderComponentReference = {
       ...manifestEntry('bad', null),
       load: async () => ({
-        createProvider: () => {
-          throw new ConfigurationError(['GLMCP_BAD_URL must be a valid absolute URL']);
+        component: {
+          metadata: {
+            id: 'bad',
+            description: 'bad',
+            distribution: 'public',
+            access: 'public',
+            resourceTypes: ['case-law'],
+            enablementVariables: [],
+            runtime: {
+              browser: false,
+              cache: false,
+              daemon: false,
+              search: true,
+              documents: false,
+              tableOfContents: false,
+              authentication: false,
+              status: false,
+            },
+          },
+          createMcpProvider: () => {
+            throw new ConfigurationError(['GLMCP_BAD_URL must be a valid absolute URL']);
+          },
+          createDataClient: () => ({
+            search: vi.fn(async () => ({ results: [], failures: [] })),
+            get: vi.fn(async () => { throw new Error('not implemented'); }),
+          }),
         },
       }),
     };

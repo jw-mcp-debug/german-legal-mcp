@@ -41,6 +41,10 @@ function pageSizeEnum(limit: number): 'Ten' | 'Twenty' | 'Fifty' | 'OneHundred' 
 
 export interface RisSearchOptions {
   query: string;
+  /** Restrict legislation search to consolidated norms instead of gazette publications. */
+  consolidatedOnly?: boolean | undefined;
+  /** Search only the legislation title; case-law and general searches use full text. */
+  searchField?: 'all' | 'title' | undefined;
   /** Judikatur sub-application (Justiz, Vwgh, Vfgh, Bvwg, …); default "Justiz". */
   court?: string | undefined;
   /** Landesrecht Bundesland filter (ASCII: Wien, Tirol, Kaernten, …). */
@@ -66,12 +70,14 @@ export class RisClient {
   async search(application: RisApplication, opts: RisSearchOptions): Promise<RisSearchResult> {
     const limit = opts.limit ?? 10;
     const params: Record<string, string | number> = {
-      Suchworte: opts.query,
+      [opts.searchField === 'title' ? 'Titel' : 'Suchworte']: opts.query,
       DokumenteProSeite: pageSizeEnum(limit),
       Seitennummer: opts.page ?? 1,
     };
     // Judikatur is one endpoint with a mandatory court sub-application.
     if (application === 'judikatur') params.Applikation = opts.court ?? 'Justiz';
+    if (opts.consolidatedOnly && application === 'bundesrecht') params.Applikation = 'BrKons';
+    if (opts.consolidatedOnly && application === 'landesrecht') params.Applikation = 'LrKons';
     // Per-Bundesland filtering is only offered by the consolidated (LrKons)
     // sub-search, via a nested boolean flag, e.g. Bundesland.SucheInWien=true.
     if (application === 'landesrecht' && opts.bundesland) {
@@ -89,7 +95,7 @@ export class RisClient {
       headers: { 'User-Agent': HTTP_USER_AGENT },
       timeout: REQUEST_TIMEOUT_MS,
     });
-    return parseSearch(res.data, limit);
+    return parseSearch(res.data, limit, opts.consolidatedOnly);
   }
 
   /**
@@ -244,6 +250,7 @@ function toHit(ref: OgdReference): RisSearchHit {
     '(ohne Titel)';
 
   const decisionTexts = jud ? extractDecisionTexts(jud) : [];
+  const consolidated = bund?.BrKons ?? land?.LrKons;
 
   return {
     id: tech.ID ?? '',
@@ -251,7 +258,18 @@ function toHit(ref: OgdReference): RisSearchHit {
     title,
     organ: tech.Organ,
     date: jud?.Entscheidungsdatum,
+    ...(geschaeftszahl ? { fileNumber: geschaeftszahl } : {}),
     ecli: jud?.EuropeanCaseLawIdentifier,
+    ...(bund?.Eli ?? land?.Eli ? { eli: bund?.Eli ?? land?.Eli } : {}),
+    ...(consolidated?.Inkrafttretensdatum
+      ? { validFrom: consolidated.Inkrafttretensdatum }
+      : {}),
+    ...(consolidated?.Ausserkrafttretensdatum
+      ? { validTo: consolidated.Ausserkrafttretensdatum }
+      : {}),
+    ...(meta.Allgemein?.Veroeffentlicht
+      ? { publicationDate: meta.Allgemein.Veroeffentlicht }
+      : {}),
     documentUrl: meta.Allgemein?.DokumentUrl,
     contentUrl: pickHtmlUrl(ref),
     ...(land?.Bundesland ? { bundesland: land.Bundesland } : {}),

@@ -34,7 +34,21 @@ const forbidden = files.filter((path) =>
   || path.includes('/fixtures/')
   || path.startsWith('coverage/')
 );
-const required = ['dist/index.js', 'dist/build-id.json', 'LICENSE', 'README.md'];
+const required = [
+  'dist/index.js',
+  'dist/index.d.ts',
+  'dist/contracts/index.js',
+  'dist/contracts/index.d.ts',
+  'dist/components/case-law/index.js',
+  'dist/components/case-law/index.d.ts',
+  'dist/components/legislation/index.js',
+  'dist/components/legislation/index.d.ts',
+  'dist/providers/rii/index.js',
+  'dist/providers/rii/index.d.ts',
+  'dist/build-id.json',
+  'LICENSE',
+  'README.md',
+];
 const missing = required.filter((path) => !files.includes(path));
 
 if (forbidden.length > 0 || missing.length > 0) {
@@ -44,6 +58,27 @@ if (forbidden.length > 0 || missing.length > 0) {
   if (missing.length > 0) {
     process.stderr.write(`Missing package artifacts:\n${missing.join('\n')}\n`);
   }
+  process.exit(1);
+}
+
+const [
+  { CaseLawClient },
+  { LegislationClient },
+  { component },
+  contracts,
+] = await Promise.all([
+  import('@metaneutrons/german-legal-mcp/components/case-law'),
+  import('@metaneutrons/german-legal-mcp/components/legislation'),
+  import('@metaneutrons/german-legal-mcp/components/rii'),
+  import('@metaneutrons/german-legal-mcp/contracts'),
+]);
+if (
+  typeof CaseLawClient !== 'function'
+  || typeof LegislationClient !== 'function'
+  || component?.metadata?.id !== 'rii'
+  || !contracts.LEGAL_RESOURCE_TYPES?.includes('case-law')
+) {
+  process.stderr.write('Package subpath exports are not consumable.\n');
   process.exit(1);
 }
 

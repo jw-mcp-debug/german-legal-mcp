@@ -20,7 +20,7 @@ export const eulTools: ToolDefinition[] = [
     description:
       'Retrieve EU legislation from EUR-Lex by CELEX number (e.g., "32016R0679" for GDPR, "32001L0029" for InfoSoc). ' +
       'Returns full text in Markdown. Use `section` for partial content: "Art. 5", "Artikel 5", or "lines:100-200". ' +
-      'Use `save_path` to save to file instead of returning content.',
+      '`save_path` is for export only — when the user wants the document as a file to keep or process elsewhere.',
     inputSchema: z.object({
       celex: z.string().describe('CELEX number (e.g., "32016R0679", "32001L0029", "12016E267")'),
       language: z.string().optional().default('DE').describe('Language code (default: DE)'),

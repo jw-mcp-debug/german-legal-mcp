@@ -2,8 +2,8 @@
   "manifest_version": "0.3",
   "name": "german-legal-mcp",
   "display_name": "German Legal MCP",
-  "version": "2.1.0",
-  "description": "German & Austrian legal research: legislation, case law, EUR-Lex, Austrian RIS, DIP Bundestag, InfoCuria and arXiv — one MCP server, no API keys required for the public sources.",
+  "version": "3.0.1",
+  "description": "German, Austrian and EU legal research: legislation, case law, parliamentary materials, preprints and standards — one MCP server; public sources need no subscription credentials.",
   "icon": "icon.png",
   "author": {
     "name": "Fabian Schmieder",
@@ -76,7 +76,9 @@
     { "name": "ris:search", "description": "Search the Austrian Rechtsinformationssystem des Bundes (RIS)." },
     { "name": "ris:get", "description": "Retrieve a RIS document as Markdown (with surgical section retrieval)." },
     { "name": "ris:get_norm", "description": "Retrieve a single paragraph (§) of an Austrian consolidated law." },
-    { "name": "ris:toc", "description": "Get the table of contents of an Austrian consolidated law." }
+    { "name": "ris:toc", "description": "Get the table of contents of an Austrian consolidated law." },
+    { "name": "nautos:search", "description": "Search DIN/EN/ISO technical standards on nautos.de by document number." },
+    { "name": "nautos:get_document", "description": "Retrieve a DIN/EN/ISO standard by acCode with outline, section and file-output support." }
   ],
   "user_config": {
     "log_level": {

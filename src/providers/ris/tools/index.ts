@@ -6,7 +6,9 @@ export const risTools: ToolDefinition[] = [
     name: 'ris:search',
     description:
       'Search the Austrian Rechtsinformationssystem des Bundes (RIS, ris.bka.gv.at). ' +
-      'application="bundesrecht"/"landesrecht" = consolidated federal/state law; ' +
+      'application="bundesrecht"/"landesrecht" searches the broad federal/state collections; ' +
+      'results may be consolidated law (BrKons/LrKons) or authentic publications, identified by their returned `applikation`. ' +
+      'A `bundesland` filter restricts state law to consolidated LrKons results. ' +
       'application="judikatur" = case law — set `court` (Justiz = OGH/OLG/LG, Vwgh = VwGH, Vfgh = VfGH, Bvwg = BVwG). ' +
       'Use sort="date" for the LATEST decisions. Judikatur results are Rechtssätze (legal principles); ' +
       'each lists its full decision text (Entscheidungstext) — fetch that with ris:get. ' +
@@ -18,7 +20,7 @@ export const risTools: ToolDefinition[] = [
         .optional()
         .default('bundesrecht')
         .describe(
-          'RIS application: "bundesrecht" (federal law), "landesrecht" (state law — all ' +
+          'RIS collection: "bundesrecht" (federal law), "landesrecht" (state law — all ' +
             'Bundesländer, or filter to one via `bundesland`), or "judikatur" (case law).',
         ),
       court: z

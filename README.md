@@ -4,16 +4,84 @@
 
 # German Legal MCP Server
 
-German &amp; Austrian legal research — one MCP server
+German, Austrian &amp; EU legal research — legislation, case law, parliamentary materials, literature and standards
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0) [![Node.js Version](https://img.shields.io/badge/node-%3E%3D25.0.0-brightgreen)](https://nodejs.org/) [![TypeScript](https://img.shields.io/badge/TypeScript-6.0-blue)](https://www.typescriptlang.org/) [![MCP](https://img.shields.io/badge/MCP-1.29-purple)](https://modelcontextprotocol.io/)
 
 </div>
 
-> **⚠️ WARNING: Work in Progress**  
-> This project is currently under active development and **not production-ready**. APIs may change without notice, and features may be incomplete or unstable. Use at your own risk.
+> **Production status**
+>
+> Version 3.0.0 provides production-ready provider contracts, application
+> components, MCP projections and public/private distributions. Third-party
+> portals remain external operational dependencies; scheduled live contracts
+> detect availability or response-shape drift. Subscription sources require
+> valid credentials, licences or institutional access.
 
-A Model Context Protocol (MCP) server for German legal research, providing unified access to multiple legal databases.
+A Model Context Protocol (MCP) server for German, Austrian and EU legal
+research, providing unified access to legislation, case law, parliamentary
+materials, literature, preprints and technical standards.
+
+The provider layer is also available as typed application components. Consumers
+do not need to run MCP or parse tool output. For example, FineRadar can consume
+normalized federal and Länder case law directly:
+
+```ts
+import {
+  CaseLawClient,
+} from '@metaneutrons/german-legal-mcp/components/case-law';
+
+const client = new CaseLawClient();
+const page = await client.search({
+  query: 'DSGVO Schadensersatz',
+  resourceTypes: ['case-law'],
+  jurisdictions: ['DE', 'DE-NW'],
+  limit: 25,
+});
+```
+
+Legislation uses the same application-facing model:
+
+```ts
+import {
+  LegislationClient,
+} from '@metaneutrons/german-legal-mcp/components/legislation';
+
+const legislation = new LegislationClient();
+const laws = await legislation.search({
+  query: 'Datenschutzgesetz',
+  resourceTypes: ['legislation'],
+  jurisdictions: ['DE-NW'],
+});
+```
+
+Shared provenance, rights, search and document types are exported from
+`@metaneutrons/german-legal-mcp/contracts`. Every provider has a component entry
+and a structured data client. The MCP tools use those same clients; MCP output
+is only a presentation layer over the application contract.
+
+Multi-domain databases return discriminated unions. For example, RIS exposes
+one client for Austrian case law and legislation; narrow each result through
+`resourceType` before using type-specific fields:
+
+```ts
+import { component as ris } from '@metaneutrons/german-legal-mcp/components/ris';
+
+const client = ris.createDataClient();
+const results = await client.search({ query: 'Datenschutz' });
+for (const result of results.results) {
+  if (result.resourceType === 'case-law') console.log(result.fileNumber);
+  if (result.resourceType === 'legislation') console.log(result.eli);
+}
+```
+
+Optional portable capabilities cover tables of contents, authentication and
+operational status. RIS exposes native legislation TOCs. The German legislation
+client reports a native TOC where the source supplies one and derives it from
+the document otherwise. RII is case-law-only and does not advertise a TOC
+capability.
+Nautos implements TOC and authentication lifecycle capabilities while keeping
+its session details behind the provider boundary.
 
 ## Supported Sources
 
@@ -34,7 +102,7 @@ A Model Context Protocol (MCP) server for German legal research, providing unifi
 ### Bundes- & Landesrecht (`legis:*` tools)
 
 - **Federal and state legislation** — BUND (all federal laws) + 16 Länder (all states)
-- **No authentication** — free public access, no rate limits
+- **No authentication** — free public access; the client defines no explicit request limit
 - **Unified interface** — one set of tools for all jurisdictions
 - **Full text search** — search across state legislation (Länder only)
 - **Resilient input** — BUND accepts "§ 823", "823", "Art. 1", "Paragraph 51"
@@ -46,6 +114,14 @@ A Model Context Protocol (MCP) server for German legal research, providing unifi
 
 - **Federal court decisions** — BVerfG, BGH, BVerwG, BFH, BAG, BSG, BPatG (from 2010)
 - **Bavarian state courts** — AG, LG, OLG, VG, VGH, FG, ArbG, LAG, BayVerfGH via gesetze-bayern.de
+- **NRW state courts** — decisions from the official NRWE database via `source: "NW"`
+- **Lower Saxony state courts** — decisions from NI-VORIS via `source: "NI"`
+- **Brandenburg state courts** — decisions from the official Brandenburg decision database via `source: "BB"`
+- **Bremen state courts** — official Bremen VG archive via `source: "HB"`; the Bremen index links separate OLG/OVG/VG/LAG portals, so coverage is explicitly partial until those portals expose a common search interface
+- **Saxony state courts** — ESAMOSplus WebForms search for the OLG Dresden archive via `source: "SN"`
+- **jPortal state courts** — Baden-Württemberg, Berlin, Hamburg, Hessen, Mecklenburg-Vorpommern, Rheinland-Pfalz, Saarland, Sachsen-Anhalt, Schleswig-Holstein and Thüringen via their official jPortal portals
+- **Shared DecisionAdapter contract** — all new state sources normalize IDs, court, date, file number, ECLI, snippets and Markdown retrieval behind the same `rii:*` tools
+- **Cross-portal search** — `source: "ALL"` searches every configured decision portal in parallel, deduplicates overlapping decisions, ranks the consolidated result list and reports unavailable portals
 - **No authentication** — free public access
 - **Full text search** — search across all federal court decisions
 - **Kurztext/Langtext** — summary or full text via `part` parameter
@@ -54,8 +130,9 @@ A Model Context Protocol (MCP) server for German legal research, providing unifi
 
 ### RIS Österreich (`ris:*` tools)
 
-- **Austrian federal, state & case law** — consolidated Bundesrecht and Landesrecht (all 9 Bundesländer, or filter to one via `bundesland`; results tagged with their Bundesland), plus Judikatur (OGH/OLG/LG via Justiz; VwGH, VfGH, BVwG and others via the `court` filter)
-  - **Note:** `bundesland` on `application="landesrecht"` returns that state's **consolidated law** (LrKons). Case law is a separate application — for raw state judikatur use `application="judikatur"` with the appropriate `court` (e.g. `Lvwg` for a Landesverwaltungsgericht), not `bundesland`.
+- **Austrian federal, state & case law** — broad Bundesrecht and Landesrecht collection search, plus Judikatur (OGH/OLG/LG via Justiz; VwGH, VfGH, BVwG and others via the `court` filter)
+  - **Collection semantics:** `ris:search` can return consolidated norms (`BrKons`/`LrKons`) and authentic gazette publications; the returned `applikation` identifies the result type. A `bundesland` filter restricts Landesrecht to that state's consolidated law (`LrKons`). For state case law use `application="judikatur"` with the appropriate `court` (e.g. `Lvwg`), not `bundesland`.
+- **Normalized application client** — `RisDataClient.search()` restricts legislation results to consolidated law and supports all 9 Bundesländer through normalized jurisdictions
 - **No authentication** — free public Open Government Data REST API (`data.bka.gv.at/ris/api/v2.6`)
 - **Latest-first** — `sort="date"` for the newest decisions; Judikatur Rechtssätze link their full decision text (Entscheidungstext) for `ris:get`
 - **Navigate & read statutes** — `ris:toc law="ABGB"` lists the §§ with headings; `ris:get_norm law="ABGB" paragraph="1295"` returns a single §
@@ -100,7 +177,7 @@ A Model Context Protocol (MCP) server for German legal research, providing unifi
 - **Metadata + abstract** — default response without full text fetch (token-efficient)
 - **HTML full text** — Markdown conversion for papers from ~2024+ (LaTeXML HTML)
 - **PDF fallback** — older papers without HTML return abstract + PDF link
-- **No authentication** — free public API, no rate limits beyond ~1 req/3s
+- **No authentication** — free public API; the client defines no explicit request limit (upstream usage policies still apply)
 - **Save to file** — `save_path` parameter to avoid context pollution
 
 ### nautos.de (`nautos:*` tools)
@@ -188,14 +265,14 @@ or add your MCP client config (e.g., `claude_desktop_config.json`):
 
 | Tool | Description |
 |------|-------------|
-| `rii:search` | Search for court decisions. Returns list with doc IDs, titles, and snippets. Use `source: "BY"` for Bavarian state courts. |
-| `rii:get_decision` | Retrieve full text of a court decision by doc ID. `part`: K (Kurztext) or L (Langtext, default). Optional `save_path` to save to file. Use `source: "BY"` for gesetze-bayern.de IDs. |
+| `rii:search` | Search for court decisions. Returns list with doc IDs, titles, metadata and snippets. `source` supports `BUND`, `BY`, `NW`, `NI`, `BB`, `HB`, `SN`, the jPortal state codes `BW`, `BE`, `HH`, `MV`, `RP`, `SL`, `ST`, `SH`, `TH`, `HE`, or `ALL` for a parallel cross-portal search with deduplication. |
+| `rii:get_decision` | Retrieve full text by doc ID. `part`: K (Kurztext) or L (Langtext, default) for BUND; optional `save_path` is supported for every source. For NRW, use the URL returned by `rii:search`; for jPortal, use its `doc_id`. |
 
 ### RIS Österreich
 
 | Tool | Description |
 |------|-------------|
-| `ris:search` | Search the Austrian RIS. `application`: "bundesrecht"/"landesrecht" (consolidated federal/state law) or "judikatur" (case law; set `court`: Justiz/Vwgh/Vfgh/Bvwg). `sort="date"` for the **latest** decisions. Landesrecht results are tagged with their Bundesland (filter to one state's consolidated law with `bundesland`). Judikatur hits are Rechtssätze that link their full decision text (Entscheidungstext) for `ris:get`. |
+| `ris:search` | Search the broad Austrian RIS Bundesrecht/Landesrecht collections or Judikatur (`court`: Justiz/Vwgh/Vfgh/Bvwg). Legislation hits may be consolidated (`BrKons`/`LrKons`) or authentic publications; inspect the returned `applikation`. `bundesland` restricts Landesrecht to that state's consolidated law. `sort="date"` returns the latest decisions first. Judikatur hits are Rechtssätze that link their full decision text for `ris:get`. |
 | `ris:get` | Retrieve a RIS document as Markdown by `content_url` (from search) or `id` + `applikation`. `section` returns only part — `Rn 5`, `Rn 5-9`, `lines:1-40`, or a heading like `Spruch` — for token-preserving reads. Optional `save_path`. |
 | `ris:get_norm` | Retrieve a single **§** of a consolidated law — `law="ABGB" paragraph="1295"`. `application`: bundesrecht (federal) or landesrecht (+ `bundesland`). The token-preserving way to read one paragraph. |
 | `ris:toc` | Table of contents (Inhaltsverzeichnis) of a consolidated law — its §§ with headings — to navigate before `ris:get_norm`. `law="ABGB"` (full title if an abbreviation fails). `application` + `bundesland` as above. |
@@ -237,18 +314,22 @@ or add your MCP client config (e.g., `claude_desktop_config.json`):
 | `nautos:search` | Search DIN/EN/ISO standards by document number. Returns acCode, title, date, type. |
 | `nautos:get_document` | Retrieve standard by acCode. Returns outline (metadata + TOC) by default; use `section` for specific parts, `save_path` to save full document. |
 
-### Two-Phase Document Retrieval
+### Token-Efficient Document Retrieval
 
-All document tools use a two-phase approach to avoid flooding the LLM context:
+Retrieval behavior is explicit and provider-specific:
 
-1. **Outline** — first call returns title, metadata, table of contents, and a preview
-2. **Section** — request specific parts by Randnummer, heading, or line range (served from cache)
-3. **Save to file** — write full document to disk, return metadata only
+1. **Outline-first** — Nautos returns metadata and a table of contents before
+   sections or full-file output are requested.
+2. **Focused reads** — tools that advertise `section` accept the selectors
+   documented in their tool description, such as Randnummer, heading, line or
+   article ranges. Selector formats are not assumed across every provider.
+3. **File output** — every tool that advertises `save_path` requires an
+   absolute path. If that tool also supports `section`, it writes the requested
+   section rather than the complete document.
 
-Section formats: `"5"` or `"5-12"` (bare numbers mean Randnummern),
-`"Rn 5"`, `"Rn 5-12"`, `"lines:100-200"`, or any heading text (fuzzy match).
-
-`save_path` must always be an absolute file path. Relative paths are not supported because MCP server processes do not share the client's working directory. When a tool supports both `section` and `save_path`, the requested section is written to that file.
+Other retrieval tools return their documented direct response; for example,
+arXiv returns metadata and the abstract by default. They are not implicitly
+converted to the outline-first flow.
 
 ### Markdown Output
 
@@ -263,7 +344,29 @@ Documents are converted to pandoc-compatible Markdown:
 npm test              # Run tests
 npm run test:watch    # Watch mode
 npm run test:coverage # Coverage report
+npm run verify        # Complete deterministic release gate
 ```
+
+### Live provider contracts
+
+The default suite never uses the network. Opt-in live contracts validate the
+current upstream response through the same normalized data clients consumed by
+applications:
+
+```bash
+npm run test:live:public
+```
+
+This runs search → normalized reference → document for the public providers and
+for every configured German case-law and legislation source. TOC-capable
+legislation sources are checked as well. Gesetze im Internet is the documented
+exception: it has no search API, so the live contract retrieves `bgb/823`
+directly and validates the BGB TOC separately.
+
+Live output contains only source, document identifier, title, resource type and
+content length. Full text is asserted in memory and is never written as a test
+report or CI artifact.
+
 
 ### MCP Inspector
 

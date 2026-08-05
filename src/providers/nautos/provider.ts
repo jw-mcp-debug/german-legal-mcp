@@ -1,13 +1,19 @@
 import type { Provider, ToolDefinition, ToolResult } from '../../shared/types.js';
 import { NautosClient } from './client.js';
+import { NautosDataClient } from './data-client.js';
 import { nautosTools } from './tools/index.js';
 import { handleSearch } from './tools/search.js';
 import { handleGetDocument } from './tools/get-document.js';
 
 export class NautosProvider implements Provider {
   readonly name = 'nautos';
+  private readonly client: NautosDataClient;
 
-  constructor(private readonly client: NautosClient = new NautosClient()) {}
+  constructor(client: NautosDataClient | NautosClient = new NautosDataClient()) {
+    this.client = client instanceof NautosDataClient
+      ? client
+      : new NautosDataClient(client);
+  }
 
   getTools(): ToolDefinition[] { return nautosTools; }
 

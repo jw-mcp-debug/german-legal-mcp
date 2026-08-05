@@ -14,8 +14,8 @@ const documentHtml = fixture('judikatur-document.html');
 /**
  * Fixture-backed, deterministic integration of the whole RIS pipeline
  * (search → surface linked decision → get → convert). Runs OFFLINE in CI, using
- * the real responses captured under __fixtures__. Live-API verification against
- * data.bka.gv.at lives in ris.live.test.ts (opt-in via GLMCP_RIS_LIVE).
+ * the real responses captured under __fixtures__. Normalized live verification
+ * lives in tests/live/public-providers.live.ts.
  */
 describe('RIS provider flow (fixture-backed, offline)', () => {
   function providerWithFixtures(): RisProvider {

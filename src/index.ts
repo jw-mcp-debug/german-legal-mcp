@@ -47,7 +47,7 @@ if (process.argv.includes('--help') || process.argv.includes('-h')) {
   console.log(`
 German Legal MCP Server v${pkg.version}
 
-A Model Context Protocol server for German legal research.
+A Model Context Protocol server for German, Austrian and EU legal research.
 
 USAGE:
   node dist/index.js [OPTIONS]

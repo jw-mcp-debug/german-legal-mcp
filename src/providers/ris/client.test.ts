@@ -139,6 +139,26 @@ describe('RisClient.search (request mapping, mocked transport)', () => {
     expect(config.params.Applikation).toBeUndefined();
   });
 
+  it('can restrict a legislation search to consolidated law titles', async () => {
+    const get = vi.fn().mockResolvedValue({ data: bundesrecht });
+    const client = new RisClient({ get });
+
+    await client.search('bundesrecht', {
+      query: 'Datenschutzgesetz',
+      consolidatedOnly: true,
+      searchField: 'title',
+      limit: 10,
+    });
+
+    const [, config] = get.mock.calls[0] as [string, { params: Record<string, unknown> }];
+    expect(config.params).toMatchObject({
+      Titel: 'Datenschutzgesetz',
+      Applikation: 'BrKons',
+      DokumenteProSeite: 'Ten',
+    });
+    expect(config.params.Suchworte).toBeUndefined();
+  });
+
   it('sort="date" adds a newest-first server-side ordering (Datum, descending)', async () => {
     const get = vi.fn().mockResolvedValue({ data: judikatur });
     const client = new RisClient({ get });

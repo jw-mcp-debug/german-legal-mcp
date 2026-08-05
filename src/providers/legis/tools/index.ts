@@ -22,7 +22,11 @@ export const legisTools: ToolDefinition[] = [
     name: 'legis:get',
     description:
       'Retrieve a specific law/norm from German federal or state legislation. ' +
-      'BUND: id is "law/section" (e.g., "bgb/823", "gg/Art. 1", "stgb/§ 242"). ' +
+      'BUND: id is "law/section" — law is the lowercase abbreviation (e.g. "bgb", "gg", "stgb"), section is just the number. ' +
+      'An optional "§", "Art.", "Paragraph", or "Para." prefix on the section is stripped automatically, so "bgb/823", "bgb/§ 823", and "bgb/§823" are equivalent; ' +
+      'use whichever prefix matches the document type (§ for codes, Art. for the Grundgesetz). ' +
+      'Not every law is hosted under its plain abbreviation on gesetze-im-internet.de — some reissued laws use a different URL slug. ' +
+      'If this returns "not found", a subscription provider that resolves abbreviations through its own index may still find it. ' +
       'Länder: id from legis:search results (format varies by state).',
     inputSchema: z.object({
       id: z.string().describe('Document ID. BUND: "law/section" (e.g., "bgb/823", "gg/Art. 1"). Länder: ID from legis:search.'),

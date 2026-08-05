@@ -164,9 +164,11 @@ describe('IcuProvider', () => {
       mockGet.mockResolvedValueOnce({ data: '<P>Dies ist ein Testurteil mit ausreichend Zeichen für die Validierung.</P>' } as any);
 
       await icuProvider.handleToolCall('icu:get_document', { case_id: 'C-476/17' });
+      // The published number is converted to its CELEX form and searched for —
+      // passing it as publishedId is silently ignored by InfoCuria.
       expect(mockPost).toHaveBeenCalledWith(
         expect.any(String),
-        expect.objectContaining({ publishedId: 'C-476/17' }),
+        expect.objectContaining({ searchTerm: '62017CJ0476' }),
         expect.any(Object),
       );
     });
@@ -186,7 +188,8 @@ describe('IcuProvider', () => {
     });
 
     it('should return error when document not found', async () => {
-      mockPost.mockResolvedValueOnce({ data: { searchHits: [] } } as any);
+      // Both candidates are tried — judgment code first, then order.
+      mockPost.mockResolvedValue({ data: { searchHits: [] } } as any);
 
       const result = await icuProvider.handleToolCall('icu:get_document', { case_id: 'C-999/99' });
       expect(result.isError).toBe(true);

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { AxiosInstance } from 'axios';
 import { RiiConverter } from './converter.js';
 import { RiiProvider } from './provider.js';
+import type { DecisionAdapter } from './types.js';
 
 function http() {
   return {
@@ -41,5 +42,19 @@ describe('RiiProvider', () => {
     });
     await expect(provider.handleToolCall('rii:unknown', {}))
       .resolves.toMatchObject({ isError: true });
+  });
+
+  it('consolidates ALL sources in parallel, deduplicates, and isolates portal failures', async () => {
+    const adapters: DecisionAdapter[] = [
+      { sources: ['BUND'], search: async () => [{ id: 'same', title: 'VwVfG Entscheidung', subtitle: 'Bund', date: '2024', court: 'VG', fileNumber: '1 A 1/24' }], get: vi.fn() },
+      { sources: ['NW'], search: async () => [{ id: 'nw-1', title: 'VwVfG NRW', subtitle: 'NRWE', date: '2023' }], get: vi.fn() },
+      { sources: ['BY'], search: async () => { throw new Error('portal unavailable'); }, get: vi.fn() },
+      { sources: ['SH'], search: async () => [{ id: 'same', title: 'VwVfG Entscheidung', subtitle: 'SH', date: '2024', court: 'VG', fileNumber: '1 A 1/24' }], get: vi.fn() },
+    ];
+    const provider = new RiiProvider(http(), new RiiConverter(), adapters);
+    await expect(provider.handleToolCall('rii:search', { query: 'VwVfG', source: 'ALL', limit: 10 })).resolves.toMatchObject({
+      content: [{ text: expect.stringMatching(/Found 2 consolidated results from 3 portals[\s\S]*Quelle: `BUND`[\s\S]*Quelle: `NW`[\s\S]*1 Portal/) }],
+    });
+    await expect(provider.handleToolCall('rii:get_decision', { doc_id: 'same', source: 'ALL' })).resolves.toMatchObject({ isError: true });
   });
 });

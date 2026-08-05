@@ -24,6 +24,16 @@ describe('convertBayernDecision', () => {
     expect(result.fileNumber).toBe('142 C 14251/20');
   });
 
+  it('accepts multiword decision types in the portal title', () => {
+    const result = convertBayernDecision(html.replace(
+      'Endurteil',
+      'Aussetzungs- und Vorlagebeschluss',
+    ));
+    expect(result.court).toBe('AG München');
+    expect(result.date).toBe('09.04.2021');
+    expect(result.fileNumber).toBe('142 C 14251/20');
+  });
+
   it('extracts the headline, Leitsätze and rsprbox groups', () => {
     const result = convertBayernDecision(html);
     expect(result.title).toBe('Mietminderung bei Schimmel');

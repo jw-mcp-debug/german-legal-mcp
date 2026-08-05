@@ -1,13 +1,19 @@
 import type { Provider, ToolDefinition, ToolResult } from '../../shared/types.js';
 import { ArxivClient } from './client.js';
+import { ArxivDataClient } from './data-client.js';
 import { arxivTools } from './tools/index.js';
 import { handleSearch } from './tools/search.js';
 import { handleGet } from './tools/get.js';
 
 export class ArxivProvider implements Provider {
   readonly name = 'arxiv';
+  private readonly client: ArxivDataClient;
 
-  constructor(private readonly client: ArxivClient = new ArxivClient()) {}
+  constructor(client: ArxivDataClient | ArxivClient = new ArxivDataClient()) {
+    this.client = client instanceof ArxivDataClient
+      ? client
+      : new ArxivDataClient(client);
+  }
 
   getTools(): ToolDefinition[] { return arxivTools; }
 

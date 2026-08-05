@@ -33,30 +33,6 @@ export type ToolHandler = (
 /** Factory contract used by the provider registry and provider entry points. */
 export type ProviderFactory = () => Provider | null;
 
-/** Shape of a dynamically imported provider entry-point module. */
-export interface ProviderModule {
-  createProvider: ProviderFactory;
-}
-
-export type ProviderDistribution = 'public' | 'private';
-
-export interface ProviderCapabilities {
-  readonly browser: boolean;
-  readonly cache: boolean;
-  readonly daemon: boolean;
-  readonly search: boolean;
-  readonly documents: boolean;
-}
-
-export interface ProviderManifestEntry {
-  readonly name: string;
-  readonly description: string;
-  readonly distribution: ProviderDistribution;
-  readonly enablementVariables: readonly string[];
-  readonly capabilities: ProviderCapabilities;
-  readonly load: () => Promise<ProviderModule>;
-}
-
 /** Request-local cache lookup result with explicit attribution. */
 export interface CacheResult<T, TSource extends string = string> {
   value: T | null;
@@ -74,7 +50,7 @@ export interface HealthStatus<TStatus extends string = string> {
  * Enables clean separation of concerns and easy addition of new providers.
  */
 export interface Provider {
-  /** Unique provider identifier (e.g., 'beck', 'ris') */
+  /** Unique provider identifier (e.g., 'ris', 'legis') */
   readonly name: string;
 
   /** 

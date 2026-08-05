@@ -1,17 +1,20 @@
 import { z } from 'zod';
 import type { ToolDefinition } from '../../../shared/types.js';
 
+const DECISION_SOURCES = ['BUND', 'BY', 'NW', 'NI', 'BB', 'HB', 'SN', 'BW', 'BE', 'HH', 'MV', 'RP', 'SL', 'ST', 'SH', 'TH', 'HE'] as const;
+const DECISION_SEARCH_SOURCES = [...DECISION_SOURCES, 'ALL'] as const;
+
 export const riiTools: ToolDefinition[] = [
   {
     name: 'rii:search',
     description:
       'Search for court decisions. Default source "bund": federal courts (BVerfG, BGH, BVerwG, BFH, BAG, BSG, BPatG). ' +
-      'Source "bayern": Bavarian state courts (AG, LG, OLG, VG, VGH, FG, ArbG, LAG, BayVerfGH). ' +
+      'Source "BY": Bavarian state courts. Sources "NW", "NI" and "BB" use the official NRW, NI-VORIS and Brandenburg decision databases. Sources BW, BE, HH, MV, RP, SL, ST, SH, TH, HE use the official jPortal state decision portals. ' +
       'Returns list of decisions with metadata and doc IDs for retrieval.',
     inputSchema: z.object({
       query: z.string().describe('Search query. For file numbers (Aktenzeichen): use ONLY the file number without keywords (e.g., "I ZR 115/16"). For topics: keywords (e.g., "Metall auf Metall", "BGB § 823").'),
       limit: z.number().optional().default(10).describe('Maximum number of results (default: 10)'),
-      source: z.enum(['BUND', 'BY']).optional().default('BUND').describe('Source: "BUND" (federal, default) or "BY" (Bavarian state courts via gesetze-bayern.de)'),
+      source: z.enum(DECISION_SEARCH_SOURCES).optional().default('BUND').describe('Decision source: BUND, BY, NW, a jPortal state code, or ALL for a consolidated cross-portal search.'),
     }),
   },
   {
@@ -24,7 +27,7 @@ export const riiTools: ToolDefinition[] = [
       doc_id: z.string().describe('Document ID from search results (e.g., "jb-KORE704442026" for BUND, "Y-300-Z-GRURRS-B-2021-N-55699" for BY)'),
       part: z.enum(['K', 'L']).optional().default('L').describe('K = Kurztext (summary), L = Langtext (full text, default). Only for source "BUND".'),
       save_path: z.string().optional().describe('Absolute file path for the full document. Relative paths are not supported. Returns metadata only.'),
-      source: z.enum(['BUND', 'BY']).optional().default('BUND').describe('Source: "BUND" (federal, default) or "BY" (Bavarian state courts)'),
+      source: z.enum(DECISION_SOURCES).optional().default('BUND').describe('Decision source: BUND, BY, NW, or a jPortal state code.'),
       section: z.string().optional().describe('Section heading or "lines:100-200". Only for source "BY".'),
     }),
   },

@@ -4,151 +4,155 @@ import type {
   ToolDefinition,
   ToolResult,
 } from '../../shared/types.js';
+import { defineProviderComponent } from '../../contracts/provider-component.js';
 import { readBooleanEnv } from '../../config.js';
 import { rootLogger } from '../../shared/logger.js';
 import { saveToFile } from '../../shared/save-to-file.js';
 import { validateConversion } from '../../shared/converter.js';
-import { invalidateAllSessions, JPORTAL_STATES } from '../../shared/clients/jportal.js';
+import { JPORTAL_STATES } from '../../shared/clients/jportal.js';
 import { legisTools } from './tools/index.js';
-import { GiiAdapter } from './adapters/gii.js';
-import { JPortalAdapter } from './adapters/jportal.js';
-import { NiedersachsenAdapter } from './adapters/niedersachsen.js';
-import { BayernAdapter } from './adapters/bayern.js';
-import { BrandenburgAdapter } from './adapters/brandenburg.js';
-import { SachsenAdapter } from './adapters/sachsen.js';
-import { BremenAdapter } from './adapters/bremen.js';
-import { NRWAdapter } from './adapters/nrw.js';
+import { LegislationClient } from './client.js';
 import type { LegisAdapter, TocEntry } from './types.js';
 
 const logger = rootLogger.child({ module: 'legis' });
 
 export class LegisProvider implements Provider {
   readonly name = 'legis';
-  private adapterMap = new Map<string, LegisAdapter>();
+  private readonly client: LegislationClient;
 
   constructor(adapters?: readonly LegisAdapter[]) {
-    const configuredAdapters = adapters ?? [
-      new GiiAdapter(),
-      new JPortalAdapter(),
-      new NiedersachsenAdapter(),
-      new BayernAdapter(),
-      new BrandenburgAdapter(),
-      new SachsenAdapter(),
-      new BremenAdapter(),
-      new NRWAdapter(),
-    ];
-    for (const adapter of configuredAdapters) {
-      for (const state of adapter.states) {
-        this.adapterMap.set(state, adapter);
-      }
-    }
+    this.client = new LegislationClient(adapters);
   }
 
   getTools(): ToolDefinition[] {
     return legisTools;
   }
 
-  async handleToolCall(toolName: string, args: Record<string, unknown>): Promise<ToolResult> {
-    if (toolName === 'legis:search') return await this.handleSearch(args);
-    if (toolName === 'legis:get') return await this.handleGet(args);
-    if (toolName === 'legis:toc') return await this.handleToc(args);
+  async handleToolCall(
+    toolName: string,
+    args: Record<string, unknown>,
+  ): Promise<ToolResult> {
+    if (toolName === 'legis:search') return this.handleSearch(args);
+    if (toolName === 'legis:get') return this.handleGet(args);
+    if (toolName === 'legis:toc') return this.handleToc(args);
     if (toolName === 'legis:states') return this.handleStates();
-    return { content: [{ type: 'text', text: `Unknown tool: ${toolName}` }], isError: true };
+    return {
+      content: [{ type: 'text', text: `Unknown tool: ${toolName}` }],
+      isError: true,
+    };
   }
 
   async shutdown(): Promise<void> {
-    invalidateAllSessions();
+    this.client.shutdown();
     logger.info('Legis provider shutdown');
   }
 
-  private getAdapter(state: string): LegisAdapter {
-    const adapter = this.adapterMap.get(state);
-    if (!adapter) throw new Error(`State "${state}" is not yet supported. Use legis:states to see available jurisdictions.`);
-    return adapter;
-  }
-
   private async handleSearch(args: Record<string, unknown>): Promise<ToolResult> {
-    const { query, state, limit = 10 } = args as { query: string; state: string; limit?: number };
-    const results = await this.getAdapter(state).search(state, query, limit);
-
-    const markdown = results
-      .map((r, i) => `${i + 1}. **${r.title}**\n   - ID: \`${r.id}\`\n   - ${r.subtitle}${r.date ? ` (${r.date})` : ''}`)
+    const { query, state, limit = 10 } = args as {
+      query: string;
+      state: string;
+      limit?: number;
+    };
+    const batch = await this.client.searchLegislation(query, {
+      sources: [state],
+      limit,
+      limitPerSource: limit,
+    });
+    if (batch.failures.length > 0) throw batch.failures[0]?.error;
+    const markdown = batch.results
+      .map((result, index) => (
+        `${index + 1}. **${result.title}**\n`
+        + `   - ID: \`${result.id}\`\n`
+        + `   - ${result.subtitle}${result.date ? ` (${result.date})` : ''}`
+      ))
       .join('\n\n');
 
-    return { content: [{ type: 'text', text: `Found ${results.length} results:\n\n${markdown}` }] };
+    return {
+      content: [{
+        type: 'text',
+        text: `Found ${batch.results.length} results:\n\n${markdown}`,
+      }],
+    };
   }
 
   private async handleGet(args: Record<string, unknown>): Promise<ToolResult> {
-    const { id, state, save_path } = args as { id: string; state: string; save_path?: string };
-    const entry = await this.getAdapter(state).get(state, id);
+    const { id, state, save_path } = args as {
+      id: string;
+      state: string;
+      save_path?: string;
+    };
+    const entry = await this.client.getLegislation(state, id);
     validateConversion(entry.content, `Landesrecht ${state}`);
-
     const markdown = `# ${entry.title}\n\n${entry.content}\n\n---\n**Source:** ${entry.url}`;
 
     if (save_path) {
-      return saveToFile(save_path, markdown, `Title: ${entry.title}\nURL: ${entry.url}`);
+      return saveToFile(
+        save_path,
+        markdown,
+        `Title: ${entry.title}\nURL: ${entry.url}`,
+      );
     }
-
     return { content: [{ type: 'text', text: markdown }] };
   }
 
   private async handleToc(args: Record<string, unknown>): Promise<ToolResult> {
     const { id, state, from, to, depth } = args as {
-      id: string; state: string; from?: string; to?: string; depth?: number;
+      id: string;
+      state: string;
+      from?: string;
+      to?: string;
+      depth?: number;
     };
-    const adapter = this.getAdapter(state);
-
-    let entries: TocEntry[];
-    if (adapter.toc) {
-      entries = await adapter.toc(state, id);
-    } else {
-      // Default: extract headings from full document markdown
-      const entry = await adapter.get(state, id);
-      entries = [];
-      for (const line of entry.content.split('\n')) {
-        const m = line.match(/^(#{1,6})\s+(.+)/);
-        if (!m) continue;
-        const heading = m[2] ?? '';
-        const d = (m[1]?.length ?? 1) - 1; // h1→0, h2→1, etc.
-        const nm = heading.match(/^(§§?\s*\S+|Art\.?\s*\S+)\s*(.*)/);
-        entries.push({ depth: d, num: nm?.[1] || '', title: nm?.[2] || heading });
-      }
+    let entries = await this.client.getTableOfContents(state, id);
+    if (depth !== undefined) {
+      entries = entries.filter((entry) => entry.depth <= depth);
     }
-
-    // Apply depth filter
-    if (depth !== undefined) entries = entries.filter((e) => e.depth <= depth);
-
-    // Apply range filter
-    if (from || to) {
-      const norm = (s: string) => s.replace(/\s+/g, '').toLowerCase();
-      const fromN = from ? norm(from) : null;
-      const toN = to ? norm(to) : null;
-      let inRange = !fromN;
-      entries = entries.filter((e) => {
-        const n = norm(e.num);
-        if (fromN && n === fromN) inRange = true;
-        if (!inRange) return false;
-        if (toN && n === toN) { inRange = false; return true; }
-        return true;
-      });
-    }
-
-    const lines = entries.map((e) => {
-      const indent = '  '.repeat(e.depth);
-      if (!e.num) return `${indent}**${e.title}**`;
-      return e.title ? `${indent}${e.num} ${e.title}` : `${indent}${e.num}`;
+    entries = this.filterRange(entries, from, to);
+    const lines = entries.map((entry) => {
+      const indent = '  '.repeat(entry.depth);
+      if (!entry.num) return `${indent}**${entry.title}**`;
+      return entry.title
+        ? `${indent}${entry.num} ${entry.title}`
+        : `${indent}${entry.num}`;
     });
+    return {
+      content: [{
+        type: 'text',
+        text: `${entries.length} entries:\n\n${lines.join('\n')}`,
+      }],
+    };
+  }
 
-    return { content: [{ type: 'text', text: `${entries.length} entries:\n\n${lines.join('\n')}` }] };
+  private filterRange(
+    entries: readonly TocEntry[],
+    from?: string,
+    to?: string,
+  ): TocEntry[] {
+    if (!from && !to) return [...entries];
+    const normalize = (value: string) => value.replace(/\s+/g, '').toLowerCase();
+    const fromNormalized = from ? normalize(from) : undefined;
+    const toNormalized = to ? normalize(to) : undefined;
+    let inRange = fromNormalized === undefined;
+    return entries.filter((entry) => {
+      const number = normalize(entry.num);
+      if (fromNormalized && number === fromNormalized) inRange = true;
+      if (!inRange) return false;
+      if (toNormalized && number === toNormalized) {
+        inRange = false;
+        return true;
+      }
+      return true;
+    });
   }
 
   private handleStates(): ToolResult {
-    const jportalStates = JPORTAL_STATES;
     const lines = [
       '| State | Status | Backend |',
       '|-------|--------|---------|',
       '| BUND | ✅ Available | gesetze-im-internet.de |',
-      ...jportalStates.map((s) => `| ${s} | ✅ Available | jportal REST API |`),
+      ...JPORTAL_STATES.map((state) => (
+        `| ${state} | ✅ Available | jportal REST API |`
+      )),
       '| NI | ✅ Available | voris.wolterskluwer-online.de |',
       '| BY | ✅ Available | gesetze-bayern.de |',
       '| BB | ✅ Available | bravors.brandenburg.de |',
@@ -164,3 +168,29 @@ export const createProvider: ProviderFactory = () => {
   if (!readBooleanEnv('GLMCP_LEGIS_ENABLED', true)) return null;
   return new LegisProvider();
 };
+
+export const component = defineProviderComponent({
+  metadata: {
+    id: 'legis',
+    description: 'German federal and state legislation',
+    distribution: 'public',
+    access: 'public',
+    resourceTypes: ['legislation'],
+    enablementVariables: ['GLMCP_LEGIS_ENABLED'],
+    runtime: {
+      browser: false,
+      cache: false,
+      daemon: false,
+      search: true,
+      documents: true,
+      tableOfContents: true,
+      authentication: false,
+      status: false,
+    },
+  },
+  createMcpProvider: createProvider,
+  createDataClient: () => new LegislationClient(),
+});
+
+export * from './client.js';
+export type * from './types.js';

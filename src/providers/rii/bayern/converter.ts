@@ -26,7 +26,7 @@ export function convertBayernDecision(html: string): {
 
   // Metadata from <title>: "AG München, Endurteil v. 09.04.2021 – 142 C 14251/20"
   const titleTag = $('title').text().replace(/\s*-\s*Bürgerservice.*/, '').trim();
-  const titleMatch = titleTag.match(/^(.+?),\s*\w+\s+v\.\s*([\d.]+)\s*[–-]\s*(.+)$/);
+  const titleMatch = titleTag.match(/^(.+?),\s*.+?\s+v\.\s*([\d.]+)\s*[–-]\s*(.+)$/);
   const court = titleMatch?.[1] || '';
   const date = titleMatch?.[2] || '';
   const fileNumber = titleMatch?.[3] || '';

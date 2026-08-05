@@ -6,27 +6,22 @@ import { EulConverter } from './converter.js';
 import { validateConversion } from '../../shared/converter.js';
 import { saveToFile } from '../../shared/save-to-file.js';
 import { eulTools } from './tools/index.js';
+import { EulDataClient } from './data-client.js';
 
 const logger = rootLogger.child({ module: 'eul-provider' });
 
-const CELLAR_BASE = 'http://publications.europa.eu/resource/celex';
-const SPARQL_URL = 'http://publications.europa.eu/webapi/rdf/sparql';
-
-const LANG_MAP: Record<string, string> = {
-  DE: 'DEU', EN: 'ENG', FR: 'FRA', IT: 'ITA', ES: 'SPA', NL: 'NLD', PT: 'POR', PL: 'POL',
-};
-
-const RESOURCE_TYPES: Record<string, string> = {
-  directive: 'DIR', regulation: 'REG', decision: 'DEC', treaty: 'TREATY',
-};
-
 export class EulProvider implements Provider {
   readonly name = 'eul';
+  private readonly client: EulDataClient;
 
   constructor(
-    private readonly http: Pick<AxiosInstance, 'get'> = axios,
-    private readonly converter: EulConverter = new EulConverter(),
-  ) {}
+    clientOrHttp: EulDataClient | Pick<AxiosInstance, 'get'> = axios,
+    converter: EulConverter = new EulConverter(),
+  ) {
+    this.client = clientOrHttp instanceof EulDataClient
+      ? clientOrHttp
+      : new EulDataClient(clientOrHttp, converter);
+  }
 
   getTools(): ToolDefinition[] {
     return eulTools;
@@ -47,33 +42,15 @@ export class EulProvider implements Provider {
       query: string; resource_type?: string; language?: string; limit?: number;
     };
 
-    const lang3 = LANG_MAP[language.toUpperCase()] || 'DEU';
-
-    let typeFilter = '';
-    if (resource_type !== 'any' && RESOURCE_TYPES[resource_type]) {
-      typeFilter = `?work cdm:work_has_resource-type <http://publications.europa.eu/resource/authority/resource-type/${RESOURCE_TYPES[resource_type]}> .`;
-    }
-
-    const sparql = `PREFIX cdm: <http://publications.europa.eu/ontology/cdm#>
-SELECT DISTINCT ?celex ?title WHERE {
-  ?work cdm:resource_legal_id_celex ?celex .
-  ${typeFilter}
-  ?expr cdm:expression_belongs_to_work ?work .
-  ?expr cdm:expression_uses_language <http://publications.europa.eu/resource/authority/language/${lang3}> .
-  ?expr cdm:expression_title ?title .
-  FILTER(CONTAINS(LCASE(?title), LCASE("${query.replace(/"/g, '\\"')}")))
-} LIMIT ${limit}`;
-
     logger.info('Searching EUR-Lex', { query, resource_type });
-    const response = await this.http.get(SPARQL_URL, {
-      params: { query: sparql },
-      headers: { 'Accept': 'application/sparql-results+json' },
+    const bindings = await this.client.searchLegislation(query, {
+      resourceType: resource_type,
+      language,
+      limit,
     });
-
-    const bindings = response.data.results?.bindings || [];
-    const markdown = bindings.map((b: Record<string, { value: string }>, i: number) => {
-      const celex = b.celex?.value ?? 'unknown';
-      const title = b.title?.value ?? '';
+    const markdown = bindings.map((b, i) => {
+      const celex = b.celex;
+      const title = b.title;
       return `${i + 1}. **${celex}**\n   ${title.slice(0, 200)}${title.length > 200 ? '…' : ''}`;
     }).join('\n\n');
 
@@ -89,16 +66,7 @@ SELECT DISTINCT ?celex ?title WHERE {
 
     logger.info('Fetching EUR-Lex document', { celex, language });
 
-    const response = await this.http.get<string>(`${CELLAR_BASE}/${celex}`, {
-      headers: {
-        'Accept': 'text/html, application/xhtml+xml',
-        'Accept-Language': `${language.toLowerCase()}, en;q=0.8`,
-      },
-      maxRedirects: 5,
-      responseType: 'text',
-    });
-
-    const markdown = this.converter.convert(response.data);
+    const markdown = await this.client.getLegislation(celex, language);
     validateConversion(markdown, 'EUR-Lex');
 
     if (section) {

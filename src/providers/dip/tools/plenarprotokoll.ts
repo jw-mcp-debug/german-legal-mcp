@@ -1,4 +1,5 @@
-import type { DipClient, DipDocument } from '../client.js';
+import type { DipDocument } from '../client.js';
+import type { DipDataClient } from '../data-client.js';
 import type { ToolResult } from '../../../shared/types.js';
 
 function formatProtokoll(d: DipDocument): string {
@@ -14,7 +15,7 @@ function formatProtokoll(d: DipDocument): string {
   return lines.join('\n');
 }
 
-export async function handleSearchPlenarprotokoll(client: DipClient, args: Record<string, unknown>): Promise<ToolResult> {
+export async function handleSearchPlenarprotokoll(client: DipDataClient, args: Record<string, unknown>): Promise<ToolResult> {
   const { query, wahlperiode, herausgeber, date_start, date_end, limit = 10 } = args as {
     query: string; wahlperiode?: number; herausgeber?: string;
     date_start?: string; date_end?: string; limit?: number;

@@ -1,9 +1,12 @@
 import type {
   Provider,
-  ProviderManifestEntry,
   ToolDefinition,
   ToolResult,
 } from './shared/types.js';
+import type {
+  ProviderComponent,
+  ProviderComponentReference,
+} from './contracts/provider-component.js';
 
 export interface ProviderLoadFailure {
   readonly provider: string;
@@ -12,11 +15,16 @@ export interface ProviderLoadFailure {
 
 export class ProviderRegistry {
   private readonly providers = new Map<string, Provider>();
+  private readonly components = new Map<string, ProviderComponent>();
 
-  constructor(private readonly manifest: readonly ProviderManifestEntry[]) {}
+  constructor(private readonly manifest: readonly ProviderComponentReference[]) {}
 
-  getManifest(): readonly ProviderManifestEntry[] {
+  getManifest(): readonly ProviderComponentReference[] {
     return this.manifest;
+  }
+
+  getComponents(): readonly ProviderComponent[] {
+    return [...this.components.values()];
   }
 
   getProviders(): readonly Provider[] {
@@ -31,11 +39,23 @@ export class ProviderRegistry {
     for (const entry of this.manifest) {
       try {
         const module = await entry.load();
-        const provider = module.createProvider();
-        if (provider === null) continue;
-        if (provider.name !== entry.name) {
+        const { component } = module;
+        if (component.metadata.id !== entry.id) {
           throw new Error(
-            `Provider manifest name "${entry.name}" does not match factory name "${provider.name}"`,
+            `Provider component id "${component.metadata.id}" does not match manifest id "${entry.id}"`,
+          );
+        }
+        if (component.metadata.distribution !== entry.distribution) {
+          throw new Error(
+            `Provider component "${entry.id}" distribution "${component.metadata.distribution}" does not match manifest distribution "${entry.distribution}"`,
+          );
+        }
+        this.components.set(entry.id, component);
+        const provider = component.createMcpProvider();
+        if (provider === null) continue;
+        if (provider.name !== entry.id) {
+          throw new Error(
+            `Provider manifest id "${entry.id}" does not match factory name "${provider.name}"`,
           );
         }
         this.providers.set(provider.name, provider);
@@ -43,11 +63,12 @@ export class ProviderRegistry {
       } catch (error) {
         // A provider that fails to load, has invalid configuration, or fails to
         // initialize disables ONLY itself — it must never abort the whole server.
-        // A single misconfigured optional provider (e.g. a bad Juris login URL)
+        // A single misconfigured optional provider (e.g. a bad login URL)
         // would otherwise take all the other providers down with it. onFailure
         // surfaces the reason to the caller.
-        this.providers.delete(entry.name);
-        onFailure?.({ provider: entry.name, error });
+        this.providers.delete(entry.id);
+        this.components.delete(entry.id);
+        onFailure?.({ provider: entry.id, error });
       }
     }
   }
@@ -74,5 +95,6 @@ export class ProviderRegistry {
       this.getProviders().map((provider) => provider.shutdown()),
     );
     this.providers.clear();
+    this.components.clear();
   }
 }

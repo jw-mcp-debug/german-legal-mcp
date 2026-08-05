@@ -22,6 +22,7 @@ export interface JPortalSearchResult {
   category: string;
   date: string;
   docPart: string;
+  snippet?: string;
 }
 
 export interface JPortalDocument {
@@ -156,6 +157,40 @@ export async function jportalSearch(
     );
 
     return results;
+  });
+}
+
+export async function jportalDecisionSearch(
+  state: string,
+  query: string,
+  limit: number,
+): Promise<JPortalSearchResult[]> {
+  return withRetry(state, async (session) => {
+    const response = await axios.post(
+      `${baseUrl(session.domain)}/search`,
+      {
+        clientID: session.portalId,
+        clientVersion: `${session.portalId} - V08_28_00`,
+        r3ID: new Date().toISOString(),
+        searches: [{ id: 'FastSearch', value: query }],
+        filters: { CATEGORY: ['Rechtsprechung'] },
+        searchTasks: {
+          RESULT_LIST: { start: 1, size: limit, sort: 'scoreR3' },
+          NUMBER_HITS: {},
+        },
+      },
+      { headers: sessionHeaders(session) },
+    );
+
+    return (response.data.resultList || []).map((r: Record<string, unknown>) => ({
+      docId: r.docId as string,
+      title: ((r.titleList as string[]) || [])[0] || '',
+      subtitle: ((r.subtitleList as string[]) || []).join(' | '),
+      category: r.categoryId as string,
+      date: r.date as string,
+      docPart: r.docPart as string,
+      snippet: ((r.snippetList as string[][]) || []).flat().join(' '),
+    }));
   });
 }
 
