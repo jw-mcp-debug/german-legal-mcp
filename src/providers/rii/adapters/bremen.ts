@@ -7,6 +7,39 @@ import type { DecisionAdapter, DecisionEntry, DecisionPage, DecisionSearchResult
 const OVERVIEW = 'https://www.verwaltungsgericht.bremen.de/entscheidungen/entscheidungsuebersicht-13039';
 const turndown = new TurndownService({ headingStyle: 'atx' });
 
+/**
+ * Bremen's index puts three fields in one link title:
+ * `subject, fileNumber, type vom date` — for example
+ * `Schulzuweisung Sek I, 1 V 2155/26, Beschluss vom 29.07.2026`.
+ *
+ * Only the date suffix was being stripped, which left the file number sitting
+ * inside the title while the `az` column stayed empty.
+ *
+ * Subjects contain commas of their own — `Disziplinarrecht Bundesbeamte,
+ * Aussetzung vorläufige Dienstenthebung, 8 V 1410/26, Beschluss vom
+ * 23.07.2026`. What keeps the middle clause from being read as the file number
+ * is anchoring the trailing `type vom date` to the end of the string, which
+ * admits exactly one split; flipping the subject group between greedy and lazy
+ * changes nothing, so the anchor is the load-bearing part rather than the
+ * quantifier.
+ *
+ * Requiring a digit in the file-number group is the second guard, and that one
+ * is not redundant: without it any three-clause title ending in a decision line
+ * would donate its middle clause as a file number.
+ */
+export function parseBremenLinkTitle(linkTitle: string): { fileNumber?: string; title: string } {
+  const match = linkTitle.match(/^(.+),\s*([^,]*\d[^,]*),\s*\S+\s+vom\s+\d{2}\.\d{2}\.\d{4}$/);
+  if (!match) {
+    // Unrecognized: fall back to the previous behaviour of dropping just the
+    // trailing decision-and-date clause.
+    return { title: linkTitle.replace(/,?\s*\S+\s+vom\s+[\d.]+$/, '').trim() };
+  }
+  const [, subject, fileNumber] = match;
+  const parsed: { fileNumber?: string; title: string } = { title: subject?.trim() || linkTitle };
+  if (fileNumber?.trim()) parsed.fileNumber = fileNumber.trim();
+  return parsed;
+}
+
 /** Bremen has no state-wide search API; the official index currently exposes the VG archive. */
 export class BremenDecisionAdapter implements DecisionAdapter {
   readonly sources = ['HB'] as const;
@@ -31,10 +64,19 @@ export class BremenDecisionAdapter implements DecisionAdapter {
       const date = cells.eq(0).find('em').text().trim();
       const text = cells.eq(1).text().replace(/\s+/g, ' ').trim();
       const link = cells.eq(1).find('a[title]').last();
-      const title = link.attr('title')?.replace(/,?\s*(Urteil|Beschluss) vom\s+[\d.]+$/, '').trim() || text;
+      const linkTitle = link.attr('title');
+      const parsed = linkTitle ? parseBremenLinkTitle(linkTitle) : { title: text };
       const href = link.attr('href');
       const url = href ? new URL(href, OVERVIEW).toString() : '';
-      return { id: url, title, subtitle: text, date, court: 'Verwaltungsgericht Bremen', url };
+      return {
+        id: url,
+        title: parsed.title || text,
+        subtitle: text,
+        date,
+        court: 'Verwaltungsgericht Bremen',
+        ...(parsed.fileNumber ? { fileNumber: parsed.fileNumber } : {}),
+        url,
+      };
     }).get().filter((result) => !needle || `${result.title} ${result.subtitle}`.toLocaleLowerCase('de-DE').includes(needle)).slice(0, limit);
     return { results };
   }

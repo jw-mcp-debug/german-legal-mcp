@@ -16,6 +16,8 @@ function result(r: JPortalSearchResult): DecisionSearchResult {
     title: r.title,
     subtitle: r.subtitle,
     date: r.date,
+    ...(r.court ? { court: r.court } : {}),
+    ...(r.fileNumber ? { fileNumber: r.fileNumber } : {}),
     ...(r.snippet ? { snippet: r.snippet } : {}),
   };
 }

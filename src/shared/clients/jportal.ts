@@ -23,6 +23,9 @@ export interface JPortalSearchResult {
   date: string;
   docPart: string;
   snippet?: string;
+  /** Decision hits only: see `decisionResult` for where these come from. */
+  court?: string;
+  fileNumber?: string;
 }
 
 export interface JPortalDocument {
@@ -170,6 +173,41 @@ export interface JPortalDecisionPage {
   totalHits?: number;
 }
 
+/**
+ * R3 packs decision metadata positionally, and the field names mislead: under
+ * `CATEGORY: Rechtsprechung`, `titleList` is `[court, fileNumber]` and
+ * `subtitleList` is `[decisionType, subject, citedNorms]`. Sampling 80 hits
+ * across all ten portals found `titleList.length === 2` and
+ * `subtitleList.length === 3` in 80 of 80, a digit in `titleList[1]` in 80 of
+ * 80, and a recognizable decision type in `subtitleList[0]` in 79 of 80.
+ *
+ * Taking `titleList[0]` as the title is therefore why `rii:search` rendered an
+ * empty `court` and `az` for all ten of these jurisdictions while the court
+ * name sat in the title column — and why the file number was dropped outright.
+ * Positions are read defensively even so: a portal that returns fewer parts
+ * should degrade to a thinner row, never to an empty title.
+ */
+function decisionResult(raw: Record<string, unknown>): JPortalSearchResult {
+  const titles = (raw.titleList as string[] | undefined) ?? [];
+  const subtitles = (raw.subtitleList as string[] | undefined) ?? [];
+  const court = titles[0]?.trim();
+  const fileNumber = titles[1]?.trim();
+  const result: JPortalSearchResult = {
+    docId: raw.docId as string,
+    title: subtitles[1]?.trim() || subtitles[0]?.trim() || court || '',
+    // Still the full join. No column renders it, but it feeds relevance
+    // scoring, where the decision type and the cited norms are worth matching.
+    subtitle: subtitles.join(' | '),
+    category: raw.categoryId as string,
+    date: raw.date as string,
+    docPart: raw.docPart as string,
+    snippet: ((raw.snippetList as string[][]) || []).flat().join(' '),
+  };
+  if (court) result.court = court;
+  if (fileNumber) result.fileNumber = fileNumber;
+  return result;
+}
+
 export async function jportalDecisionSearch(
   state: string,
   query: string,
@@ -195,15 +233,7 @@ export async function jportalDecisionSearch(
 
     const total = response.data.hits;
     return {
-      results: (response.data.resultList || []).map((r: Record<string, unknown>) => ({
-        docId: r.docId as string,
-        title: ((r.titleList as string[]) || [])[0] || '',
-        subtitle: ((r.subtitleList as string[]) || []).join(' | '),
-        category: r.categoryId as string,
-        date: r.date as string,
-        docPart: r.docPart as string,
-        snippet: ((r.snippetList as string[][]) || []).flat().join(' '),
-      })),
+      results: (response.data.resultList || []).map(decisionResult),
       // -1 is the portal's "not counted" marker, seen on the per-word `hits`.
       ...(typeof total === 'number' && total >= 0 ? { totalHits: total } : {}),
     };

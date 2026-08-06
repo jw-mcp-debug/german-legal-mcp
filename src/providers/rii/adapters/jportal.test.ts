@@ -35,4 +35,40 @@ describe('JPortalDecisionAdapter', () => {
     });
     expect(await adapter.searchPage('BW', 'x', 1)).not.toHaveProperty('totalHits');
   });
+
+  it('carries court and file number through to the search result', async () => {
+    const adapter = new JPortalDecisionAdapter({
+      search: async () => ({
+        results: [{
+          docId: 'NJRE001530568',
+          title: 'Außerordentliche Kündigung - Löschung betrieblicher Daten',
+          subtitle: 'Urteil | Außerordentliche Kündigung | § 626 Abs 1 BGB',
+          category: 'Rechtsprechung',
+          date: '17.11.2022',
+          docPart: 'L',
+          court: 'Landesarbeitsgericht Hamburg 3. Kammer',
+          fileNumber: '5 Sa 12/22',
+        }],
+      }),
+      get: async () => ({ title: '', head: '', text: '', permalink: '' }),
+    });
+    // rii:search renders `court` and `az` columns. Dropping these here is what
+    // left both empty for all ten jportal jurisdictions.
+    await expect(adapter.search('HH', 'Kündigung', 1)).resolves.toMatchObject([{
+      court: 'Landesarbeitsgericht Hamburg 3. Kammer',
+      fileNumber: '5 Sa 12/22',
+    }]);
+  });
+
+  it('omits court and file number when the portal supplied neither', async () => {
+    const adapter = new JPortalDecisionAdapter({
+      search: async () => ({
+        results: [{ docId: 'a', title: 't', subtitle: '', category: 'Rechtsprechung', date: '', docPart: 'L' }],
+      }),
+      get: async () => ({ title: '', head: '', text: '', permalink: '' }),
+    });
+    const [first] = (await adapter.searchPage('BW', 'x', 1)).results;
+    expect(first).not.toHaveProperty('court');
+    expect(first).not.toHaveProperty('fileNumber');
+  });
 });

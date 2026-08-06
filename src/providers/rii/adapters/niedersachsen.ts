@@ -18,6 +18,54 @@ export function parseNiedersachsenTotalHits(html: string): number | undefined {
   return Number.isNaN(total) ? undefined : total;
 }
 
+/**
+ * NI packs several fields into one result heading: `court, date - fileNumber`,
+ * optionally followed by ` - subject`. Sampling 48 headings across four queries
+ * found the four-part form in 48 of 48, always with a digit in the file number;
+ * the three-part form (no subject) also occurs and is what the stored fixture
+ * carries.
+ *
+ * Only the court was being recovered, so `rii:search` rendered an empty `az`
+ * for this source while the file number sat in plain sight inside the title —
+ * and the court, date and file number each ate into the title column's width
+ * despite having columns of their own.
+ *
+ * The subject is split off by scanning for the first ` - ` rather than with one
+ * regex over the whole heading, so that the optional trailing part cannot make
+ * the engine prefer a shorter file number than intended. The separator requires
+ * surrounding whitespace for the same reason a bare `-` is not enough: it would
+ * split a file number such as `2 BvR 1-2/20` down the middle.
+ */
+export function parseNiedersachsenHeading(heading: string): {
+  court?: string;
+  date?: string;
+  fileNumber?: string;
+  title: string;
+} {
+  const match = heading.match(/^(.+?),\s*(\d{2}\.\d{2}\.\d{4})\s+-\s+(.+)$/);
+  if (!match) {
+    // An unrecognized heading is kept whole rather than guessed at, but the
+    // court only needs the leading comma, so that much is still worth having.
+    const fallbackCourt = heading.match(/^([^,]+),/)?.[1]?.trim();
+    return { title: heading, ...(fallbackCourt ? { court: fallbackCourt } : {}) };
+  }
+
+  const [, court, date, rest = ''] = match;
+  const separator = rest.search(/\s+-\s+/);
+  const fileNumber = (separator === -1 ? rest : rest.slice(0, separator)).trim();
+  const subject = separator === -1 ? '' : rest.slice(separator).replace(/^\s+-\s+/, '').trim();
+
+  const parsed: { court?: string; date?: string; fileNumber?: string; title: string } = {
+    // With no subject every part already has its own column, but an empty title
+    // cell is worse than a redundant one, so the heading stands in.
+    title: subject || heading,
+  };
+  if (court?.trim()) parsed.court = court.trim();
+  if (date?.trim()) parsed.date = date.trim();
+  if (fileNumber) parsed.fileNumber = fileNumber;
+  return parsed;
+}
+
 export class NiedersachsenDecisionAdapter implements DecisionAdapter {
   readonly sources = ['NI'] as const;
 
@@ -36,10 +84,18 @@ export class NiedersachsenDecisionAdapter implements DecisionAdapter {
     const results = $('.egal-search-result-item-title h3 a[href^="/browse/document/"]').slice(0, limit).map((_, el) => {
       const item = $(el).closest('.views-row, .egal-search-result-item');
       const extra = item.find('.egal-search-result-item-extra').text().replace(/\s+/g, ' ').trim();
-      const date = extra.match(/Entscheidungsdatum:\s*([\d.]+)/)?.[1] || '';
-      const title = $(el).text().replace(/\s+/g, ' ').trim();
-      const court = title.match(/^([^,]+),/)?.[1];
-      return { id: $(el).attr('href')?.split('/').pop() || '', title, subtitle: item.find('.egal-search-result-item-snippet').text().replace(/\s+/g, ' ').trim(), date, ...(court ? { court } : {}) };
+      const heading = parseNiedersachsenHeading($(el).text().replace(/\s+/g, ' ').trim());
+      // The labelled facet date is authoritative where present; the heading's
+      // own date is the fallback for items that omit the facet.
+      const date = extra.match(/Entscheidungsdatum:\s*([\d.]+)/)?.[1] || heading.date || '';
+      return {
+        id: $(el).attr('href')?.split('/').pop() || '',
+        title: heading.title,
+        subtitle: item.find('.egal-search-result-item-snippet').text().replace(/\s+/g, ' ').trim(),
+        date,
+        ...(heading.court ? { court: heading.court } : {}),
+        ...(heading.fileNumber ? { fileNumber: heading.fileNumber } : {}),
+      };
     }).get();
     const totalHits = parseNiedersachsenTotalHits(response.data);
     return { results, ...(totalHits === undefined ? {} : { totalHits }) };

@@ -275,11 +275,19 @@ export class CaseLawClient implements LegalDataProvider<CaseLawReference> {
     };
   }
 
+  /**
+   * Court and file number are scored alongside the free text. Without them a
+   * query like "Landesarbeitsgericht Kündigung" only matches on the second
+   * term, because every adapter that resolves the court into its own field
+   * rather than into the title kept it out of the scored text entirely.
+   */
   private searchScore(
-    result: Pick<DecisionSearchResult, 'title' | 'subtitle' | 'snippet'>,
+    result: Pick<DecisionSearchResult, 'title' | 'subtitle' | 'snippet' | 'court' | 'fileNumber'>,
     terms: readonly string[],
   ): number {
-    const text = `${result.title} ${result.subtitle} ${result.snippet ?? ''}`
+    const text = [result.title, result.subtitle, result.snippet, result.court, result.fileNumber]
+      .filter((part): part is string => part !== undefined && part !== '')
+      .join(' ')
       .toLocaleLowerCase(this.configuration.locale);
     return terms.reduce((score, term) => score + (text.includes(term) ? 1 : 0), 0);
   }

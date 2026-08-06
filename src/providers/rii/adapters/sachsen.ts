@@ -5,6 +5,28 @@ import { HTTP_USER_AGENT } from '../../../config.js';
 import type { DecisionAdapter, DecisionEntry, DecisionPage, DecisionSearchResult } from '../types.js';
 
 const URL = 'https://www.justiz.sachsen.de/esamosplus/pages/suchen.aspx';
+
+/**
+ * Two budgets, because the two requests behave nothing alike.
+ *
+ * The landing page is a static ASP.NET render that answered in 87–177ms across
+ * repeated measurements, so 8s is already ~45x headroom; it was only ever
+ * sharing the search timeout by accident.
+ *
+ * The search POST is the known-bad half — this adapter has recorded 504s from
+ * it, and every measured attempt consumed its entire budget and returned
+ * nothing. `CaseLawClient` fans all seventeen sources out concurrently, so
+ * whatever this number is becomes the floor on total search latency for every
+ * `rii:search`. At the previous 15s, Sachsen alone set that floor while
+ * contributing nothing.
+ *
+ * 6s is a damage bound, not a measurement: there is no successful sample to
+ * size against. It is deliberately still generous for a slow-but-working
+ * endpoint, so a recovered upstream is not locked out by an over-tight limit.
+ */
+const LANDING_TIMEOUT_MS = 8000;
+const SEARCH_TIMEOUT_MS = 6000;
+
 const turndown = new TurndownService({ headingStyle: 'atx' });
 type Http = Pick<AxiosInstance, 'get' | 'post'>;
 type HitId = { query: string; name: string; value: string };
@@ -28,7 +50,21 @@ export class SachsenDecisionAdapter implements DecisionAdapter {
   }
 
   private async submit(query: string, extra?: { name: string; value: string }): Promise<SubmitResult> {
-    const initial = await this.http.get<string>(URL, { timeout: 15000, headers: { 'User-Agent': HTTP_USER_AGENT } });
+    // Named so the failure this surfaces through `failures[]` says which of the
+    // two requests died. A bare "timeout of 15000ms exceeded" was ambiguous
+    // between the landing page and the search, and the two mean very different
+    // things: the former is the portal being down, the latter is business as
+    // usual for this endpoint.
+    let initial;
+    try {
+      initial = await this.http.get<string>(URL, { timeout: LANDING_TIMEOUT_MS, headers: { 'User-Agent': HTTP_USER_AGENT } });
+    } catch (error) {
+      throw new Error(
+        `Sachsen landing page did not load within ${LANDING_TIMEOUT_MS}ms `
+        + `(${error instanceof Error ? error.message : String(error)})`,
+        { cause: error },
+      );
+    }
     // The landing page already contains the current decisions. Posting an empty
     // search can produce an empty result page on the live WebForms endpoint.
     if (!extra && query.trim() === '') return { html: initial.data, fallback: true };
@@ -38,7 +74,7 @@ export class SachsenDecisionAdapter implements DecisionAdapter {
     const setCookie = initial.headers?.['set-cookie'];
     const cookie = Array.isArray(setCookie) ? setCookie.map((value: string) => value.split(';', 1)[0]).join('; ') : undefined;
     try {
-      const response = await this.http.post<string>(URL, form.toString(), { timeout: 15000, headers: { 'User-Agent': HTTP_USER_AGENT, Referer: URL, 'Content-Type': 'application/x-www-form-urlencoded', ...(cookie ? { Cookie: cookie } : {}) } });
+      const response = await this.http.post<string>(URL, form.toString(), { timeout: SEARCH_TIMEOUT_MS, headers: { 'User-Agent': HTTP_USER_AGENT, Referer: URL, 'Content-Type': 'application/x-www-form-urlencoded', ...(cookie ? { Cookie: cookie } : {}) } });
       return { html: response.data, fallback: false };
     } catch {
       return { html: initial.data, fallback: true };

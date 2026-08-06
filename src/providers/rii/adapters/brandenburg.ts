@@ -16,6 +16,17 @@ export class BrandenburgDecisionAdapter implements DecisionAdapter {
     return (await this.searchPage(_source, query, limit)).results;
   }
 
+  /**
+   * No file number, deliberately. The result table's columns are row number,
+   * Typ, Datum, Bezeichnung and Gericht — there is no Aktenzeichen among them,
+   * the row and its link carry no title or data attribute holding one, and the
+   * file numbers that do appear inside Bezeichnung text ("Zu der Entscheidung
+   * 6 U 54/26") are references to *other* decisions rather than the row's own.
+   *
+   * Recovering it would mean fetching every result's detail page, turning one
+   * search into N+1 requests, so `az` stays empty for BB while every other
+   * source fills it. `get` reads it from the detail page's metadata table.
+   */
   async searchPage(_source: string, query: string, limit: number, page = 1): Promise<DecisionPage> {
     const response = await this.http.get<string>(`${BASE}/suche`, { params: { input_fulltext: query, ...(page > 1 ? { page: String(page) } : {}) }, headers: { 'User-Agent': HTTP_USER_AGENT } });
     const $ = cheerio.load(response.data);

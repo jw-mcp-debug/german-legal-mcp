@@ -134,4 +134,36 @@ describe('RiiProvider', () => {
       expect(sources.filter((value) => value === source)).toHaveLength(3);
     }
   });
+
+  it('scores the court and file number, not just the free text', async () => {
+    // Both hits match "Kündigung"; only one is a labour court. The adapter
+    // resolves the court into its own field rather than into the title, which
+    // is exactly the case where the court name used to be invisible to scoring.
+    const adapter: DecisionAdapter = {
+      sources: ['HH'],
+      search: async () => [
+        {
+          id: 'civil', title: 'Kündigung eines Mietvertrags', subtitle: '',
+          date: '01.01.2026', court: 'Amtsgericht Hamburg', fileNumber: '12 C 5/25',
+        },
+        {
+          id: 'labour', title: 'Kündigung nach Datenlöschung', subtitle: '',
+          date: '01.01.2020', court: 'Landesarbeitsgericht Hamburg', fileNumber: '5 Sa 12/22',
+        },
+      ],
+      get: vi.fn(),
+    };
+    const provider = new RiiProvider(http(), new RiiConverter(), [adapter]);
+
+    const text = await provider
+      .handleToolCall('rii:search', { query: 'Landesarbeitsgericht Kündigung', source: 'ALL', limit: 2 })
+      .then((r) => (r.content[0] as { text: string }).text);
+    const rows = text.split('\n');
+    const header = rows.indexOf('src\tdate\tcourt\taz\tecli\ttitle\tdocId');
+
+    // Two of two terms match the labour hit against one of two for the civil
+    // one, so it must rank first — despite being the older of the pair, which
+    // is what the date tie-break would otherwise decide.
+    expect(rows[header + 1]).toContain('labour');
+  });
 });
