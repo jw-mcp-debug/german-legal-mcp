@@ -1,6 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import { readFile } from 'node:fs/promises';
-import { NiedersachsenDecisionAdapter, parseNiedersachsenHeading } from './niedersachsen.js';
+import {
+  NiedersachsenDecisionAdapter,
+  isEmptyResultResponse,
+  parseNiedersachsenHeading,
+} from './niedersachsen.js';
+
+/** Shaped like the axios error the portal actually produces. */
+const httpError = (status: number, body: string) => ({
+  isAxiosError: true,
+  message: `Request failed with status code ${status}`,
+  response: { status, data: body },
+});
+
+const EMPTY_STATE = '<div class="view-empty">Es wurden keine passenden Dokumente gefunden.</div>';
 
 describe('NiedersachsenDecisionAdapter', () => {
   it('regresses NI-VORIS search and full-text conversion against HTML samples', async () => {
@@ -50,6 +63,52 @@ describe('NiedersachsenDecisionAdapter', () => {
       fileNumber: '11 LA 42/26',
       ecli: 'ECLI:DE:OVGNI:2026:0803.11LA42.26.00',
     });
+  });
+});
+
+describe('NI zero-result 404s', () => {
+  it('reads a no-hits search as an empty page, not a source failure', async () => {
+    // Measured against the live portal: "DMA Bußgeld" and a nonsense term both
+    // 404 while DSGVO returns 200. Treating that as a failure is why NI was
+    // reported unavailable for most queries and contributed nothing.
+    const adapter = new NiedersachsenDecisionAdapter({
+      get: async () => {
+        throw httpError(404, `<html><body>${EMPTY_STATE}</body></html>`);
+      },
+    });
+    await expect(adapter.searchPage('NI', 'DMA Bußgeld', 10)).resolves.toEqual({
+      results: [],
+    });
+  });
+
+  it('still fails when a 404 does not carry the portal empty state', async () => {
+    // A moved or renamed endpoint must stay loud; both 404s carry the site
+    // chrome, so only the empty state tells them apart.
+    const adapter = new NiedersachsenDecisionAdapter({
+      get: async () => {
+        throw httpError(404, '<html><body><main>Seite nicht gefunden</main></body></html>');
+      },
+    });
+    await expect(adapter.searchPage('NI', 'DSGVO', 10)).rejects.toThrow(/404/);
+  });
+
+  it('does not swallow other transport errors', async () => {
+    const adapter = new NiedersachsenDecisionAdapter({
+      get: async () => {
+        throw httpError(500, EMPTY_STATE);
+      },
+    });
+    await expect(adapter.searchPage('NI', 'DSGVO', 10)).rejects.toThrow(/500/);
+  });
+});
+
+describe('isEmptyResultResponse', () => {
+  it('accepts only a 404 carrying the empty state', () => {
+    expect(isEmptyResultResponse(httpError(404, EMPTY_STATE))).toBe(true);
+    expect(isEmptyResultResponse(httpError(404, 'Seite nicht gefunden'))).toBe(false);
+    expect(isEmptyResultResponse(httpError(500, EMPTY_STATE))).toBe(false);
+    expect(isEmptyResultResponse(new Error('socket hang up'))).toBe(false);
+    expect(isEmptyResultResponse(undefined)).toBe(false);
   });
 });
 

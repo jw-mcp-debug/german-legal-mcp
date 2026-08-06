@@ -12,7 +12,7 @@ German, Austrian &amp; EU legal research — legislation, case law, parliamentar
 
 > **Production status**
 >
-> Version 3.2.0 provides production-ready provider contracts, application
+> Version 3.2.1 provides production-ready provider contracts, application
 > components, MCP projections and public/private distributions. Case-law search
 > pages through every source that supports one and reports each source's own hit
 > total. Third-party portals remain external operational dependencies; scheduled

@@ -66,6 +66,24 @@ export function parseNiedersachsenHeading(heading: string): {
   return parsed;
 }
 
+/**
+ * Distinguishes NI's "no hits" 404 from a 404 that means the endpoint moved.
+ *
+ * Both carry the site chrome, so status and body size decide nothing. The
+ * portal's own empty state is the discriminator — measured: a zero-result
+ * search 404s *with* it, a bogus path 404s *without* it, and a search with hits
+ * returns 200 and never contains it.
+ */
+export function isEmptyResultResponse(error: unknown): boolean {
+  const status = (error as { response?: { status?: number } })?.response?.status;
+  if (status !== 404) return false;
+  const body = (error as { response?: { data?: unknown } })?.response?.data;
+  return (
+    typeof body === 'string'
+    && /view-empty|keine passenden Dokumente gefunden/i.test(body)
+  );
+}
+
 export class NiedersachsenDecisionAdapter implements DecisionAdapter {
   readonly sources = ['NI'] as const;
 
@@ -76,10 +94,21 @@ export class NiedersachsenDecisionAdapter implements DecisionAdapter {
   }
 
   async searchPage(_source: string, query: string, limit: number, page = 1): Promise<DecisionPage> {
-    const response = await this.http.get<string>(`${BASE}/search`, {
-      params: { query, pit: 'in_force', publicationtype: 'publicationform-ats-filter!ATS_Rechtsprechung', ...(page > 1 ? { page: String(page) } : {}) },
-      headers: { 'User-Agent': HTTP_USER_AGENT },
-    });
+    let response;
+    try {
+      response = await this.http.get<string>(`${BASE}/search`, {
+        params: { query, pit: 'in_force', publicationtype: 'publicationform-ats-filter!ATS_Rechtsprechung', ...(page > 1 ? { page: String(page) } : {}) },
+        headers: { 'User-Agent': HTTP_USER_AGENT },
+      });
+    } catch (error) {
+      // NI answers a search with no hits using 404 and a full results page
+      // carrying its own empty state, so an unfiltered failure here reported
+      // "source unavailable" for every query the portal simply had no matches
+      // for — which is most of them. It is why NI contributed nothing to an
+      // ingest while working perfectly when tested with a term that does match.
+      if (isEmptyResultResponse(error)) return { results: [] };
+      throw error;
+    }
     const $ = cheerio.load(response.data);
     const results = $('.egal-search-result-item-title h3 a[href^="/browse/document/"]').slice(0, limit).map((_, el) => {
       const item = $(el).closest('.views-row, .egal-search-result-item');
