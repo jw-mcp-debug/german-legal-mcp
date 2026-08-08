@@ -17,6 +17,7 @@ export default [
         process: 'readonly',
         URL: 'readonly',
         document: 'readonly',
+        navigator: 'readonly',
         HTMLElement: 'readonly',
         HTMLAnchorElement: 'readonly',
         Buffer: 'readonly',

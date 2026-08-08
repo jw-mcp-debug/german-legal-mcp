@@ -123,5 +123,12 @@ export function getLogLevel(env: Environment = getEnvironment()): string {
   return readStringEnv('GLMCP_LOG_LEVEL', env) ?? readStringEnv('LOG_LEVEL', env) ?? 'info';
 }
 
-export const BROWSER_USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
+/**
+ * Identifies this tool to plain HTTP APIs, and is meant to: those are public
+ * interfaces where saying who is calling is the courtesy. There is deliberately
+ * no browser counterpart here — a pinned browser identity contradicts the
+ * client hints the browser goes on reporting for itself, so a real browser's
+ * identity is read from the browser (see `shared/browser-identity.ts`) rather
+ * than declared in configuration.
+ */
 export const HTTP_USER_AGENT = 'Mozilla/5.0 (compatible; German-Legal-MCP/1.0)';

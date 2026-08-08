@@ -3,12 +3,17 @@
  * Startup smoke test for the published entrypoint. Validates that the built
  * `dist/index.js` actually loads and runs — catching broken imports, a config
  * module that throws, or a packaging mistake that `npm run build` alone would
- * not surface. Two checks:
+ * not surface. Four checks:
  *
  *   1. `--version` prints the package version and exits 0 (entrypoint + config
  *      parse without starting the server).
  *   2. Plain start boots the MCP server, connects the stdio transport and logs
  *      readiness within a timeout, then is terminated.
+ *   3. CLI mode's own `--help` for a real tool prints its options and exits 0
+ *      — network-free, since it only inspects the tool's schema.
+ *   4. An unknown tool name in CLI mode exits 1 rather than falling through to
+ *      MCP server startup, which is the actual risk this mode introduces: the
+ *      branch that decides "CLI or server" must never guess wrong.
  *
  * Runs as part of `npm run verify`, after the package contents are checked.
  */
@@ -75,5 +80,27 @@ if (!s.timedOut && s.code !== 0) {
   fail(`server exited with code ${s.code}\n${s.stderr}`);
 }
 console.log('✓ server booted and reported readiness');
+
+// --- Check 3: CLI mode --help for a real tool, no network involved
+// Asserts on formatToolHelp()'s distinguishing output shape, not just
+// substrings the global --help text also happens to contain (the tool list
+// includes "arxiv:search" and the usage block includes "OPTIONS:") — a
+// looser check here previously stayed green while argv order made
+// `arxiv:search --help` fall through to the *global* help instead of the
+// tool's own.
+const h = await run(['arxiv:search', '--help'], { timeoutMs: 10_000 });
+if (h.code !== 0) fail(`CLI --help exited with code ${h.code}\n${h.stderr}`);
+if (!h.stdout.startsWith('arxiv:search — ') || h.stdout.includes('TOOLS (')) {
+  fail(`CLI --help printed unexpected output (looks like the global --help):\n${h.stdout}`);
+}
+console.log('✓ CLI mode: arxiv:search --help');
+
+// --- Check 4: an unknown tool name exits 1, not the MCP server
+const u = await run(['nope:nope'], { timeoutMs: 10_000 });
+if (u.code !== 1) fail(`unknown tool exited with code ${u.code}, expected 1\n${u.stderr}`);
+if (u.stderr.includes('MCP server connected and ready')) {
+  fail('unknown tool name fell through to MCP server startup');
+}
+console.log('✓ CLI mode: unknown tool exits 1 without starting the server');
 
 console.log('Startup smoke passed.');

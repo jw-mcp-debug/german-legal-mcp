@@ -63,6 +63,22 @@ export class NetworkError extends RecoverableError {
   override readonly recoveryHint: string = 'Check your internet connection and retry.';
 }
 
+/**
+ * Renders a thrown tool-call error the same way regardless of transport.
+ *
+ * The MCP stdio handler and the CLI dispatcher both call a `Provider`; a
+ * network fault or a bug must not read differently depending on which one
+ * happened to invoke it. Wraps an AxiosError as a BaseError first so both
+ * transports get the structured `{code, userMessage, recoveryHint}` shape
+ * instead of a bare Axios message.
+ */
+export function formatToolCallError(error: unknown): string {
+  const wrapped = error instanceof BaseError ? error : wrapAxiosError(error);
+  return wrapped
+    ? JSON.stringify(wrapped.toJSON(), null, 2)
+    : `Error: ${error instanceof Error ? error.message : String(error)}`;
+}
+
 /** Convert AxiosError to a BaseError subclass */
 export function wrapAxiosError(error: unknown): BaseError | null {
   if (!axios.isAxiosError(error)) return null;

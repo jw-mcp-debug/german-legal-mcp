@@ -23,11 +23,26 @@ export const SENSITIVE_LOG_KEYS = [
   'secret', 'tenantKey', 'credential', 'credentials',
 ] as const;
 
-/** Query parameters that commonly carry session tokens or one-time credentials. */
+/**
+ * Query parameters that commonly carry session tokens or one-time credentials.
+ *
+ * The SAML group is here because federated web sign-on carries its material in
+ * the query string. `samlresponse` is the one that matters most: it holds the
+ * signed assertion, which is the authenticated identity plus every attribute
+ * the identity provider released. `execution` is such a provider's flow key.
+ * A username is personal data even where it is not a secret, so it goes too.
+ *
+ * Deliberately absent: `qurl`. Where it appears it carries the *target* address
+ * — nothing confidential — and it is the single most useful field for working
+ * out what a lapsed session was trying to reach. Redacting it would cost real
+ * diagnostics and protect nothing.
+ */
 const SENSITIVE_QUERY_PARAMS = new Set([
   'token', 'ticket', 'code', 'session', 'sessionid', 'jsessionid', 'jwt',
   'password', 'pwd', 'auth', 'access_token', 'id_token', 'refresh_token',
   'api_key', 'apikey', 'key', 'secret', 'signature', 'sig',
+  'samlrequest', 'samlresponse', 'relaystate', 'execution',
+  'j_username', 'j_password', 'user', 'username', 'uid', 'pass', 'passwd',
 ]);
 
 /**

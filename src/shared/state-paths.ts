@@ -40,6 +40,16 @@ export const SESSION_DIR = join(STATE_DIR, 'sessions');
 export const METRICS_DIR = join(STATE_DIR, 'metrics');
 export const SOCKET_DIR = join(STATE_DIR, 'sockets');
 export const LOCK_DIR = join(STATE_DIR, 'locks');
+/**
+ * Persistent browser profiles — Chrome's own `userDataDir`, not our state.
+ *
+ * Separate from SESSION_DIR on purpose. A session file is a jar of cookies we
+ * captured and can rewrite at will; a profile is a directory Chrome owns
+ * exclusively while it runs, holds far more than cookies (local storage, the
+ * history and device state an identity provider reads to recognise a browser
+ * it has seen before), and is safe to delete only when no browser has it open.
+ */
+export const PROFILE_DIR = join(STATE_DIR, 'profiles');
 
 export function statePath(...segments: string[]): string {
   return join(STATE_DIR, ...segments);
@@ -63,4 +73,8 @@ export function socketPath(...segments: string[]): string {
 
 export function lockPath(...segments: string[]): string {
   return join(LOCK_DIR, ...segments);
+}
+
+export function profilePath(...segments: string[]): string {
+  return join(PROFILE_DIR, ...segments);
 }

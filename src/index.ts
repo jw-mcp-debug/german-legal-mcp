@@ -6,7 +6,7 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { z } from 'zod';
-import { BaseError, wrapAxiosError } from "./shared/errors.js";
+import { formatToolCallError } from "./shared/errors.js";
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -15,12 +15,32 @@ import { rootLogger } from './shared/logger.js';
 import { ConfigurationError } from './config.js';
 import { PROVIDER_MANIFEST } from './provider-manifest.js';
 import { ProviderRegistry } from './provider-registry.js';
+import { looksLikeToolInvocation, runCli } from './cli.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 // Single source of truth for package metadata
 const pkg = JSON.parse(readFileSync(join(__dirname, '../package.json'), 'utf-8'));
+
+/**
+ * `node dist/index.js rii:search --query "..." --limit 5` calls the tool
+ * directly and exits — no stdio transport, no MCP client. This must be
+ * checked before --version/--help below: a tool name as argv[0] makes this
+ * unambiguously CLI mode, including when the invocation itself asks for
+ * --help (e.g. `rii:search --help`), which must print that tool's own
+ * options, not the server's — a bare `process.argv.includes('--help')`
+ * would otherwise match on that trailing flag and never reach runCli.
+ */
+if (looksLikeToolInvocation(process.argv.slice(2))) {
+  const cliRegistry = new ProviderRegistry(PROVIDER_MANIFEST);
+  await cliRegistry.load(({ provider, error }) => {
+    rootLogger.warn(`Provider "${provider}" disabled: failed to load`, { error });
+  });
+  const exitCode = await runCli(process.argv.slice(2), cliRegistry);
+  await cliRegistry.shutdown();
+  process.exit(exitCode);
+}
 
 // Handle --version flag
 if (process.argv.includes('--version') || process.argv.includes('-v')) {
@@ -114,12 +134,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   } catch (error) {
     const duration = Date.now() - startTime;
     logger.error('Tool call failed', error as Error, { tool: name, duration });
-    const wrapped = error instanceof BaseError ? error : wrapAxiosError(error);
-    const text = wrapped
-      ? JSON.stringify(wrapped.toJSON(), null, 2)
-      : `Error: ${error instanceof Error ? error.message : String(error)}`;
     return {
-      content: [{ type: 'text', text }],
+      content: [{ type: 'text', text: formatToolCallError(error) }],
       isError: true,
     };
   }
