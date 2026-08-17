@@ -7,6 +7,12 @@ import type {
   LegalSearchPage,
   LegalSearchRequest,
 } from '../../contracts/legal-resource.js';
+import type {
+  CorpusEnumerationCapability,
+  CorpusEnumerationPage,
+  CorpusEnumerationRequest,
+} from '../../contracts/provider-capabilities.js';
+import { EulConverter } from '../eul/converter.js';
 import { IcuConverter } from './converter.js';
 import { classifyIcuError } from './errors.js';
 
@@ -22,6 +28,7 @@ const RIGHTS = {
   access: 'public',
   fullTextStorage: 'allowed',
   redistribution: 'unknown',
+  licence: 'NOASSERTION',
 } as const;
 
 export interface IcuSearchHit {
@@ -34,10 +41,86 @@ export interface IcuSearchHit {
   readonly logicDocId?: string;
 }
 
-export class IcuDataClient implements LegalDataProvider<CaseLawReference> {
+const SPARQL_URL = 'https://publications.europa.eu/webapi/rdf/sparql';
+const EURLEX_HTML = 'https://eur-lex.europa.eu/legal-content';
+
+/**
+ * EUR-Lex answers 200 either way, so the language a document actually came
+ * back in has to be read off the response — and there is no header for it.
+ * `Content-Language` is empty on every Cellar and EUR-Lex response checked,
+ * the redirect target is an opaque UUID, and `lang` appears on some documents
+ * and not others.
+ *
+ * What does separate them is the page itself: a document is served as bare
+ * document HTML, while "not available in this language" is answered with the
+ * full EUR-Lex site page, navigation chrome and all. This id belongs to that
+ * chrome and appears in no document.
+ */
+const EURLEX_CHROME_MARKER = 'op-header-language';
+
+/**
+ * Below this, the response was not a decision.
+ *
+ * A safety net, not the primary defence — `DECISION_CELEX_SPARQL` keeps the
+ * Official Journal notices out of the walk in the first place, which matters
+ * because the longest of them measured 2.033 characters and would have cleared
+ * any floor set low enough to admit a short order.
+ *
+ * What this still catches is a source answering 200 with an error body —
+ * Cellar returns 214 characters reading "None of the requests returned
+ * successfully a redirection." for some orders. Those are real decisions whose
+ * rendering failed, and the fallback sends them to InfoCuria.
+ */
+const PUBLISHED_TEXT_MIN_CHARS = 2_000;
+const DEFAULT_ENUMERATION_LIMIT = 500;
+const MAX_ENUMERATION_LIMIT = 2_000;
+
+/**
+ * Decisions only, in canonical CELEX form.
+ *
+ * Two filters in one expression, for two different mistakes.
+ *
+ * **Form.** `62017CJ0476`, not `62014TJ0639(01)` or `62014TJ0639(01)_RES`.
+ * The suffixed variants are corrigenda and summaries that share their parent's
+ * ECLI, so they would enter a corpus as duplicates — and they are exactly the
+ * shapes `isCelex` rejects, leaving `get` unable to resolve a reference this
+ * walk had just produced.
+ *
+ * **Type.** Sector 6 mixes decisions with Official Journal announcements
+ * *about* cases, and the announcements are not case law. Measured across a
+ * 754-document sample from 2025-06 onward:
+ *
+ * | Type | | Chars |
+ * |---|---|---|
+ * | `CJ` | Court of Justice judgment | 111.559 |
+ * | `TJ` | General Court judgment | 52.774 |
+ * | `CC` | Advocate General's opinion | 64.900 |
+ * | `TC` | Advocate General, General Court | 55.231 |
+ * | `CO`/`TO` | orders | Cellar redirect fails; InfoCuria serves them |
+ * | `CA` `CB` `CN` `TA` `TN` | OJ notice — *excluded* | 1.027–2.033 |
+ *
+ * The notice types all open "Amtsblatt der Europäischen Union". Filtering them
+ * by document type rather than by length matters: `CN` measured 2.033
+ * characters and would have cleared any plausible length floor, entering the
+ * corpus as a decision it is not.
+ *
+ * The list is an allowlist because admitting an unknown type silently is worse
+ * than omitting a rare one visibly. `CV` (Opinions of the Court under Art. 218
+ * XI TFEU) is included as a known decision type though none appeared in the
+ * sample; listing a type that never matches costs nothing, while omitting a
+ * real one loses documents.
+ */
+const DECISION_CELEX_SPARQL = '^6\\\\d{4}(CJ|CO|CC|CV|TJ|TO|TC)\\\\d+$';
+
+export class IcuDataClient
+implements LegalDataProvider<CaseLawReference>, CorpusEnumerationCapability<CaseLawReference> {
   constructor(
     private readonly http: Pick<AxiosInstance, 'get' | 'post'> = axios,
     private readonly converter: IcuConverter = new IcuConverter(),
+    // Cellar serves Official-Journal-class XHTML, which is what EulConverter
+    // already handles — the same publisher and the same markup, reached from a
+    // different provider.
+    private readonly cellarConverter: EulConverter = new EulConverter(),
   ) {}
 
   async searchCaseLaw(query: string, language = 'DE', limit = 10): Promise<{
@@ -97,14 +180,170 @@ export class IcuDataClient implements LegalDataProvider<CaseLawReference> {
 
   async get(reference: CaseLawReference): Promise<LegalResourceDocument<CaseLawReference>> {
     assertReference(reference);
-    const result = await this.getCaseLaw(
-      reference.provenance.providerDocumentId,
-      reference.language?.toUpperCase() ?? 'DE',
-    );
-    if (!result) throw new Error(`InfoCuria document ${reference.provenance.providerDocumentId} not found.`);
+    const language = reference.language?.toUpperCase() ?? 'DE';
+    const id = reference.provenance.providerDocumentId;
+
+    // Enumeration yields CELEX-keyed references, and EUR-Lex serves those
+    // directly — one request instead of the two the InfoCuria path needs
+    // (search to resolve CELEX → logicDocId, then fetch). For a backfill of
+    // tens of thousands of decisions that halves the traffic and keeps it off
+    // a search API that was never meant for bulk.
+    if (isCelex(id)) {
+      const fetched = await this.getPublishedText(id, language);
+      if (fetched) {
+        return {
+          // The language is what came back, not what was asked for. The Court
+          // translates a case's title into every official language but not
+          // always its text, so a reference enumerated from a German title can
+          // still only be available in the case language.
+          reference: fetched.language === reference.language
+            ? reference
+            : { ...reference, language: fetched.language },
+          content: { format: 'markdown', value: fetched.markdown },
+        };
+      }
+    }
+
+    const result = await this.getCaseLaw(id, language);
+    if (!result) throw new Error(`InfoCuria document ${id} not found.`);
     return {
       reference,
       content: { format: 'markdown', value: result.markdown },
+    };
+  }
+
+  /**
+   * The decision's text from Cellar, or `undefined` when Cellar has no real
+   * text for it.
+   *
+   * Not every sector-6 CELEX resolves to a full document. Judgments do —
+   * `62017CJ0476` returns 54k characters, `62018CJ0311` 186k — but for orders
+   * published only as an Official Journal notice, Cellar serves the notice:
+   * `62014TB0684` yields 427 characters that begin "Amtsblatt der Europäischen
+   * Union". Returning that as the decision would silently replace a judgment
+   * with its own announcement.
+   *
+   * The length test is deliberately generous. Its failure mode is falling back
+   * to InfoCuria — exactly what this method exists to avoid, but never wrong —
+   * so erring high costs one extra request and never costs correctness.
+   */
+  private async getPublishedText(
+    celex: string,
+    language: string,
+  ): Promise<{ markdown: string; language: string } | undefined> {
+    // The requested language first, then the fallback the Court publishes
+    // everything in. Asking explicitly rather than by content negotiation is
+    // what makes the answer's language knowable at all.
+    const wanted = language.toUpperCase();
+    for (const lang of wanted === 'EN' ? ['EN'] : [wanted, 'EN']) {
+      const markdown = await this.fetchEurLexHtml(celex, lang);
+      if (markdown) return { markdown, language: lang.toLowerCase() };
+    }
+    return undefined;
+  }
+
+  private async fetchEurLexHtml(celex: string, language: string): Promise<string | undefined> {
+    try {
+      const response = await this.http.get<string>(
+        `${EURLEX_HTML}/${language}/TXT/HTML/`,
+        {
+          params: { uri: `CELEX:${celex}` },
+          headers: { 'Accept': 'text/html, application/xhtml+xml' },
+          maxRedirects: 5,
+          responseType: 'text',
+        },
+      );
+      // Site chrome means EUR-Lex answered "not in this language" rather than
+      // with the document, at HTTP 200.
+      if (typeof response.data !== 'string' || response.data.includes(EURLEX_CHROME_MARKER)) {
+        return undefined;
+      }
+      const markdown = this.cellarConverter.convert(response.data);
+      return markdown.trim().length >= PUBLISHED_TEXT_MIN_CHARS ? markdown : undefined;
+    } catch {
+      // A language or a document EUR-Lex does not hold is ordinary here.
+      return undefined;
+    }
+  }
+
+  /**
+   * Walk CJEU case law from Cellar — a different backend than `search`, which
+   * queries InfoCuria. InfoCuria has no walkable listing; Cellar holds the same
+   * decisions as CELEX sector 6 and filters by date server-side, so `origin` is
+   * `native`.
+   *
+   * Cost note for bulk callers: the reference this yields is keyed by CELEX,
+   * and `get` resolves CELEX to InfoCuria's internal id with one extra search
+   * request per document. Fetching the text from Cellar directly would halve
+   * that; it is not done here because it would change what `get` returns for
+   * every existing caller.
+   */
+  async enumerate(request: CorpusEnumerationRequest = {}): Promise<CorpusEnumerationPage<CaseLawReference>> {
+    if (request.resourceTypes && !request.resourceTypes.includes('case-law')) {
+      return { results: [], failures: [], origin: 'native' };
+    }
+    if (request.jurisdictions && !request.jurisdictions.some((id) => id.toUpperCase() === 'EU')) {
+      return { results: [], failures: [], origin: 'native' };
+    }
+    const limit = Math.min(Math.max(1, request.limit ?? DEFAULT_ENUMERATION_LIMIT), MAX_ENUMERATION_LIMIT);
+    const language = 'DEU';
+    const sinceFilter = request.since
+      ? `FILTER(?d >= "${request.since.slice(0, 10)}"^^xsd:date)`
+      : '';
+    const keyset = request.cursor
+      ? `FILTER(STR(?celex) > "${request.cursor.replace(/"/g, '')}")`
+      : '';
+    // Grouped, not DISTINCT. `SELECT DISTINCT` is distinct over the whole
+    // tuple, so a work carrying two titles or two ECLIs emitted the same CELEX
+    // more than once — observed live, 62020TJ0510 twice inside one page of
+    // ten. Duplicates waste a fetch each and make `limit` mean less than it
+    // says. Grouping on ?celex guarantees one row per document.
+    const sparql = `PREFIX cdm: <http://publications.europa.eu/ontology/cdm#>
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+SELECT ?celex (SAMPLE(?t) AS ?title) (MIN(?d) AS ?date) (SAMPLE(?e) AS ?ecli) WHERE {
+  ?work cdm:resource_legal_id_celex ?celex .
+  ?work cdm:work_date_document ?d .
+  OPTIONAL { ?work cdm:case-law_ecli ?e }
+  ?expr cdm:expression_belongs_to_work ?work .
+  ?expr cdm:expression_uses_language <http://publications.europa.eu/resource/authority/language/${language}> .
+  ?expr cdm:expression_title ?t .
+  ${sinceFilter}
+  ${keyset}
+  FILTER(REGEX(STR(?celex), "${DECISION_CELEX_SPARQL}"))
+} GROUP BY ?celex ORDER BY ?celex LIMIT ${limit}`;
+
+    const response = await this.request(() => this.http.get(SPARQL_URL, {
+      params: { query: sparql },
+      headers: { 'Accept': 'application/sparql-results+json' },
+    }));
+    const bindings: Record<string, { value?: string }>[] = response.data.results?.bindings ?? [];
+    const results = bindings.map((binding): CaseLawReference => {
+      const celex = binding.celex?.value ?? '';
+      const ecli = binding.ecli?.value;
+      return {
+        resourceType: 'case-law',
+        title: binding.title?.value || ecli || celex,
+        jurisdiction: 'EU',
+        language: 'de',
+        ...(binding.date?.value ? { decisionDate: binding.date.value } : {}),
+        ...(ecli ? { ecli } : {}),
+        provenance: {
+          providerId: 'icu',
+          sourceId: 'icu:infocuria',
+          providerDocumentId: celex,
+          canonicalUrl: `https://eur-lex.europa.eu/legal-content/DE/TXT/?uri=CELEX:${celex}`,
+        },
+        rights: RIGHTS,
+      };
+    });
+    const last = results.at(-1);
+    return {
+      results,
+      failures: [],
+      ...(results.length === limit && last
+        ? { nextCursor: last.provenance.providerDocumentId }
+        : {}),
+      origin: 'native',
     };
   }
 

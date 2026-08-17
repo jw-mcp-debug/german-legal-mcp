@@ -22,7 +22,7 @@ export const component = defineProviderComponent({
       'GLMCP_NAUTOS_USERNAME',
       'GLMCP_NAUTOS_PASSWORD',
     ],
-    runtime: { browser: false, cache: true, daemon: false, search: true, documents: true, tableOfContents: true, authentication: true, status: false },
+    runtime: { browser: false, cache: true, daemon: false, search: true, documents: true, tableOfContents: true, authentication: true, status: false, enumeration: false },
   },
   createMcpProvider: createProvider,
   createDataClient: () => new NautosDataClient(),

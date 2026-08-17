@@ -17,7 +17,7 @@ export const component = defineProviderComponent({
     access: 'public',
     resourceTypes: ['parliamentary-material'],
     enablementVariables: ['GLMCP_DIP_ENABLED', 'GLMCP_DIP_API_KEY'],
-    runtime: { browser: false, cache: false, daemon: false, search: true, documents: true, tableOfContents: false, authentication: false, status: false },
+    runtime: { browser: false, cache: false, daemon: false, search: true, documents: true, tableOfContents: false, authentication: false, status: false, enumeration: true },
   },
   createMcpProvider: createProvider,
   createDataClient: () => new DipDataClient(),

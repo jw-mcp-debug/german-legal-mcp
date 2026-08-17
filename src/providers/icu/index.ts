@@ -17,7 +17,7 @@ export const component = defineProviderComponent({
     access: 'public',
     resourceTypes: ['case-law'],
     enablementVariables: ['GLMCP_ICU_ENABLED'],
-    runtime: { browser: false, cache: false, daemon: false, search: true, documents: true, tableOfContents: false, authentication: false, status: false },
+    runtime: { browser: false, cache: false, daemon: false, search: true, documents: true, tableOfContents: false, authentication: false, status: false, enumeration: true },
   },
   createMcpProvider: createProvider,
   createDataClient: () => new IcuDataClient(),

@@ -186,6 +186,7 @@ export const component = defineProviderComponent({
       tableOfContents: true,
       authentication: false,
       status: false,
+      enumeration: true,
     },
   },
   createMcpProvider: createProvider,

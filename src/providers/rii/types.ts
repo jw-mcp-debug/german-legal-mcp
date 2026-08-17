@@ -23,8 +23,17 @@ export interface DecisionEntry {
   date: string;
   fileNumber: string;
   ecli?: string;
+  /**
+   * The fields below are published as tagged data in RII's XML distribution and
+   * are absent from the rendered page, so only the archive route fills them.
+   * `headnotes` and `norms` were declared here long before anything populated
+   * them; the HTML scrape could not.
+   */
   headnotes?: string[];
   norms?: string[];
+  chamber?: string;
+  documentType?: string;
+  priorInstances?: string[];
 }
 
 export interface DecisionGetOptions {
@@ -43,6 +52,27 @@ export interface DecisionPage {
   pagingUnsupported?: boolean;
 }
 
+export interface DecisionEnumerationRequest {
+  /**
+   * ISO 8601 lower bound, compared against the source's own modification
+   * stamp. Date-only values work: `2026-08-01` sorts below
+   * `2026-08-06T21:08:06.267Z`.
+   */
+  since?: string;
+  cursor?: string;
+  limit?: number;
+}
+
+/**
+ * A page of a corpus walk. `origin` carries the same meaning as on the
+ * contract's `CorpusEnumerationPage` and decides what a delta run costs.
+ */
+export interface DecisionEnumerationPage {
+  results: DecisionSearchResult[];
+  nextCursor?: string;
+  origin: 'native' | 'derived' | 'unfiltered';
+}
+
 export interface DecisionAdapter {
   readonly sources: readonly string[];
   search(source: string, query: string, limit: number): Promise<DecisionSearchResult[]>;
@@ -55,6 +85,15 @@ export interface DecisionAdapter {
    * fake.
    */
   searchPage?(source: string, query: string, limit: number, page?: number): Promise<DecisionPage>;
+  /**
+   * Walk the source's whole corpus, rather than answering a query.
+   *
+   * Optional for the same reason `searchPage` is: most RII portals expose only
+   * a stateful search mask, and an adapter that faked enumeration by iterating
+   * queries would report coverage it cannot deliver. Adapters implement this
+   * only where the portal publishes a listing that can actually be walked.
+   */
+  enumerate?(source: string, request?: DecisionEnumerationRequest): Promise<DecisionEnumerationPage>;
   get(source: string, id: string, options?: DecisionGetOptions): Promise<DecisionEntry>;
 }
 

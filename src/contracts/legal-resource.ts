@@ -18,6 +18,7 @@ export type FullTextStoragePolicy =
 
 export type RedistributionPolicy =
   | 'allowed'
+  | 'share-alike'
   | 'metadata-only'
   | 'prohibited'
   | 'unknown';
@@ -25,7 +26,30 @@ export type RedistributionPolicy =
 export interface LegalResourceRights {
   readonly access: ProviderAccess;
   readonly fullTextStorage: FullTextStoragePolicy;
+  /**
+   * What a consumer may do — the policy a serving gate enforces.
+   *
+   * `share-alike` is not a softer `allowed`: the text may be served, but
+   * attribution is mandatory and the obligation propagates to derived
+   * databases. Collapsing it into `allowed` would make a licence's conditions
+   * invisible to the code meant to honour them.
+   */
   readonly redistribution: RedistributionPolicy;
+  /**
+   * What the source actually says, as an SPDX identifier or expression —
+   * `ODbL-1.0`, `CC-BY-4.0`, `CC-BY-NC-4.0`, `DL-DE-BY-2.0`, or a
+   * `LicenseRef-…` for terms with no SPDX entry.
+   *
+   * Deliberately separate from `redistribution`: this is the *fact*, that is
+   * the *assessment*. Keeping them apart is what makes the assessment
+   * auditable — and lets a consumer render the right attribution and reason
+   * about compatibility between two share-alike sources, which a policy enum
+   * alone cannot express.
+   *
+   * `NOASSERTION` means nobody has determined it yet. It is SPDX's own term
+   * for exactly that, and it pairs with `redistribution: 'unknown'`.
+   */
+  readonly licence: string;
 }
 
 export interface LegalResourceProvenance {
@@ -52,6 +76,21 @@ export interface CaseLawReference extends LegalResourceReference {
   readonly court?: string;
   readonly fileNumber?: string;
   readonly ecli?: string;
+  /** Deciding body within the court — "1. Zivilsenat", "Großer Senat". */
+  readonly chamber?: string;
+  /** "Urteil", "Beschluss", "Versäumnisurteil" — as the source names it. */
+  readonly documentType?: string;
+  /**
+   * Norms the court applied, as published: `§ 8 Abs 2 Nr 1 MarkenG`.
+   *
+   * Optional because most sources make a consumer find these in the prose.
+   * Where a source states them — RII does, in its XML distribution — carrying
+   * them through is the difference between reading a citation graph off the
+   * document and inferring one from running text.
+   */
+  readonly citedNorms?: readonly string[];
+  /** Prior instances, as the source states them. */
+  readonly priorInstances?: readonly string[];
 }
 
 export interface LegislationReference extends LegalResourceReference {

@@ -17,7 +17,7 @@ export const component = defineProviderComponent({
     access: 'public',
     resourceTypes: ['legislation', 'case-law'],
     enablementVariables: ['GLMCP_RIS_ENABLED'],
-    runtime: { browser: false, cache: false, daemon: false, search: true, documents: true, tableOfContents: true, authentication: false, status: false },
+    runtime: { browser: false, cache: false, daemon: false, search: true, documents: true, tableOfContents: true, authentication: false, status: false, enumeration: false },
   },
   createMcpProvider: createProvider,
   createDataClient: () => new RisDataClient(),

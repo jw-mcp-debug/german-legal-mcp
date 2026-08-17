@@ -2,10 +2,82 @@ import axios, { type AxiosInstance } from 'axios';
 import * as cheerio from 'cheerio';
 import { HTTP_USER_AGENT } from '../../../config.js';
 import { validateConversion } from '../../../shared/converter.js';
+import { xmlField, xmlItems } from '../../../shared/xml.js';
+import { readFirstZipEntry } from '../../../shared/zip.js';
+import { parseRiiDocument } from '../xml.js';
 import { RiiConverter } from '../converter.js';
-import type { DecisionAdapter, DecisionEntry, DecisionGetOptions, DecisionPage, DecisionSearchResult } from '../types.js';
+import type { DecisionAdapter, DecisionEnumerationPage, DecisionEnumerationRequest, DecisionEntry, DecisionGetOptions, DecisionPage, DecisionSearchResult } from '../types.js';
 
 const BASE_URL = 'https://www.rechtsprechung-im-internet.de/jportal/portal/page/bsjrsprod.psml';
+
+/**
+ * The published table of contents — every decision the portal holds, in one
+ * ~23 MB XML document.
+ *
+ * This is a different route into the same site than `search`, and the only one
+ * that can enumerate: the search mask is a stateful Jetspeed portlet that
+ * serves page one only, and the portal itself refuses to page beyond 3.000
+ * hits, so no sequence of queries reaches the whole corpus.
+ */
+const TOC_URL = 'https://www.rechtsprechung-im-internet.de/rii-toc.xml';
+
+/** Where the table of contents points: one ZIP per decision, holding its XML. */
+const DOCS_URL = 'https://www.rechtsprechung-im-internet.de/jportal/docs/bsjrs';
+
+/**
+ * How long one download is reused across the paged calls of a single walk.
+ *
+ * A walk of 83.785 entries takes many pages; refetching 23 MB per page would
+ * be absurd, and a snapshot that shifted mid-walk would make cursors lie.
+ */
+const TOC_TTL_MS = 60 * 60 * 1000;
+
+const DEFAULT_ENUMERATION_LIMIT = 1_000;
+const MAX_ENUMERATION_LIMIT = 5_000;
+
+interface TocEntry {
+  readonly id: string;
+  readonly court: string;
+  readonly decisionDate: string;
+  readonly fileNumber: string;
+  readonly modified: string;
+}
+
+/** `20100108` in the feed; `2010-01-08` everywhere downstream. */
+function isoDate(compact: string): string {
+  const match = compact.match(/^(\d{4})(\d{2})(\d{2})$/);
+  return match ? `${match[1]}-${match[2]}-${match[3]}` : compact;
+}
+
+/**
+ * The document id the rest of the adapter already speaks.
+ *
+ * The feed links to `.../jb-JURE100054597.zip`, and the portal's own result
+ * rows carry `doc.id=jb-KORE607392026` — prefix included. Stripping `jb-` here
+ * would produce references that `get` cannot resolve.
+ */
+function documentIdFromLink(link: string): string {
+  return link.match(/\/([^/]+)\.zip\s*$/)?.[1] ?? '';
+}
+
+export function parseTableOfContents(xml: string): TocEntry[] {
+  const entries: TocEntry[] = [];
+  for (const item of xmlItems(xml)) {
+    const id = documentIdFromLink(xmlField(item, 'link'));
+    if (!id) continue;
+    entries.push({
+      id,
+      court: xmlField(item, 'gericht'),
+      decisionDate: isoDate(xmlField(item, 'entsch-datum')),
+      fileNumber: xmlField(item, 'aktenzeichen'),
+      modified: xmlField(item, 'modified'),
+    });
+  }
+  // Sorted by id so a cursor is "the last id emitted" rather than an offset
+  // into a snapshot. An offset would skip or repeat entries whenever the feed
+  // is regenerated between pages.
+  return entries.sort((a, b) => a.id.localeCompare(b.id));
+}
 
 /**
  * The result count, taken from the `numberofresults` field the result-list form
@@ -27,7 +99,108 @@ export function parseFederalTotalHits(html: string): number | undefined {
 export class FederalDecisionAdapter implements DecisionAdapter {
   readonly sources = ['BUND'] as const;
 
+  private toc?: { entries: readonly TocEntry[]; fetchedAt: number };
+  private tocInFlight?: Promise<readonly TocEntry[]>;
+
   constructor(private readonly http: Pick<AxiosInstance, 'get'> = axios, private readonly converter: RiiConverter = new RiiConverter()) {}
+
+  /**
+   * Walk the published table of contents.
+   *
+   * `origin` is `derived`, not `native`: the feed is one static document with
+   * no server-side filtering, so `since` is applied here after downloading it.
+   * Exact, but every walk pays for the whole 23 MB listing once.
+   *
+   * `modified` is the feed's own stamp and is a hint, not a guarantee — its
+   * values currently cluster at a single date, which is the signature of a
+   * site-wide regeneration. A caller must still compare content hashes rather
+   * than trust that a changed stamp means changed text.
+   */
+  async enumerate(_source: string, request: DecisionEnumerationRequest = {}): Promise<DecisionEnumerationPage> {
+    const limit = Math.min(Math.max(1, request.limit ?? DEFAULT_ENUMERATION_LIMIT), MAX_ENUMERATION_LIMIT);
+    const entries = await this.tableOfContents();
+    const matching = request.since
+      ? entries.filter((entry) => entry.modified >= request.since!)
+      : entries;
+    const start = request.cursor
+      ? matching.findIndex((entry) => entry.id.localeCompare(request.cursor!) > 0)
+      : 0;
+    const page = start < 0 ? [] : matching.slice(start, start + limit);
+    const last = page.at(-1);
+    const exhausted = start < 0 || start + page.length >= matching.length;
+
+    return {
+      results: page.map((entry): DecisionSearchResult => ({
+        id: entry.id,
+        // The feed carries no title. A citation-shaped label is the honest
+        // stand-in; `get` replaces it with the decision's own once fetched.
+        title: [entry.court, entry.fileNumber].filter(Boolean).join(' | ') || entry.id,
+        subtitle: entry.decisionDate,
+        date: entry.decisionDate,
+        ...(entry.court ? { court: entry.court } : {}),
+        ...(entry.fileNumber ? { fileNumber: entry.fileNumber } : {}),
+        url: `${BASE_URL}?doc.id=${entry.id}`,
+      })),
+      ...(exhausted || !last ? {} : { nextCursor: last.id }),
+      origin: 'derived',
+    };
+  }
+
+  private async getFromArchive(id: string): Promise<DecisionEntry | undefined> {
+    try {
+      const response = await this.http.get<ArrayBuffer>(`${DOCS_URL}/${id}.zip`, {
+        headers: { 'User-Agent': HTTP_USER_AGENT },
+        responseType: 'arraybuffer',
+      });
+      const entry = readFirstZipEntry(Buffer.from(response.data));
+      const document = parseRiiDocument(entry.data.toString('utf8'));
+      if (!document.markdown) return undefined;
+      return {
+        title: document.title,
+        content: document.markdown,
+        url: `${BASE_URL}?doc.id=${id}`,
+        court: [document.court, document.chamber].filter(Boolean).join(' '),
+        date: document.decisionDate,
+        fileNumber: document.fileNumber,
+        ...(document.ecli ? { ecli: document.ecli } : {}),
+        ...(document.headnotes.length > 0 ? { headnotes: [...document.headnotes] } : {}),
+        ...(document.citedNorms.length > 0 ? { norms: [...document.citedNorms] } : {}),
+        ...(document.chamber ? { chamber: document.chamber } : {}),
+        ...(document.documentType ? { documentType: document.documentType } : {}),
+        ...(document.priorInstances.length > 0
+          ? { priorInstances: [...document.priorInstances] }
+          : {}),
+      };
+    } catch {
+      // No archive for this id, or an unreadable one. The rendered page is
+      // still there, so this is a fallback rather than a failure.
+      return undefined;
+    }
+  }
+
+  /**
+   * One download per TTL, and one in flight at a time — concurrent pages at
+   * the start of a walk would otherwise each pull their own 23 MB copy.
+   */
+  private async tableOfContents(): Promise<readonly TocEntry[]> {
+    if (this.toc && Date.now() - this.toc.fetchedAt < TOC_TTL_MS) return this.toc.entries;
+    this.tocInFlight ??= (async () => {
+      try {
+        const response = await this.http.get<string>(TOC_URL, {
+          headers: { 'User-Agent': HTTP_USER_AGENT },
+          responseType: 'text',
+          maxContentLength: Infinity,
+          maxBodyLength: Infinity,
+        });
+        const entries = parseTableOfContents(response.data);
+        this.toc = { entries, fetchedAt: Date.now() };
+        return entries;
+      } finally {
+        this.tocInFlight = undefined as unknown as Promise<readonly TocEntry[]>;
+      }
+    })();
+    return this.tocInFlight;
+  }
 
   async search(_source: string, query: string, limit: number): Promise<DecisionSearchResult[]> {
     return (await this.searchPage(_source, query, limit)).results;
@@ -97,7 +270,25 @@ export class FederalDecisionAdapter implements DecisionAdapter {
     return { results, ...(totalHits === undefined ? {} : { totalHits }) };
   }
 
+  /**
+   * The published XML archive first, the rendered page only if that fails.
+   *
+   * The archive is the same document by a better road: it carries the ECLI, the
+   * decision type, the chamber, the norms the court applied and the prior
+   * instances as tagged fields, and keeps the section boundaries and
+   * Randnummern that the page flattens. It is also one request against a static
+   * file with a published DTD, rather than a scrape of a portlet whose paging
+   * is already known to be unreliable.
+   *
+   * The HTML path stays as the fallback because the archive is not guaranteed
+   * to exist for every id — a decision published today may not be in the
+   * distribution yet.
+   */
   async get(_source: string, id: string, options: DecisionGetOptions = {}): Promise<DecisionEntry> {
+    if (!options.part || options.part === 'L') {
+      const fromArchive = await this.getFromArchive(id);
+      if (fromArchive) return fromArchive;
+    }
     const response = await this.http.get<string>(BASE_URL, { params: { 'doc.id': id, 'doc.part': options.part || 'L', showdoccase: '1', paramfromHL: 'true' }, headers: { 'User-Agent': HTTP_USER_AGENT } });
     const d = this.converter.extractDecision(response.data);
     validateConversion(d.content, 'Rechtsprechung im Internet');

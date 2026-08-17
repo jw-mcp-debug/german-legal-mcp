@@ -70,3 +70,51 @@ describe('EulDataClient', () => {
     expect(options.params.query).toContain('LIMIT 2');
   });
 });
+
+describe('EulDataClient enumeration', () => {
+  function sparqlHttp(rows: Record<string, { value: string }>[]) {
+    return {
+      get: vi.fn(async () => ({ data: { results: { bindings: rows } } })),
+    } as unknown as Pick<AxiosInstance, 'get'> & { get: ReturnType<typeof vi.fn> };
+  }
+
+  const row = (celex: string, date = '2026-07-01') => ({
+    celex: { value: celex },
+    title: { value: `Titel ${celex}` },
+    date: { value: date },
+  });
+
+  it('filters server-side and reports native origin', async () => {
+    const http = sparqlHttp([row('32016R0679')]);
+    const page = await new EulDataClient(http).enumerate({ since: '2026-07-01' });
+
+    expect(page.origin).toBe('native');
+    const query = http.get.mock.calls[0]?.[1]?.params?.query as string;
+    expect(query).toContain('FILTER(?date >= "2026-07-01"^^xsd:date)');
+    expect(query).toContain('ORDER BY ?celex');
+    expect(page.results[0]).toMatchObject({
+      resourceType: 'legislation',
+      jurisdiction: 'EU',
+      celex: '32016R0679',
+      publicationDate: '2026-07-01',
+      provenance: expect.objectContaining({ providerDocumentId: '32016R0679' }),
+    });
+  });
+
+  it('pages on CELEX rather than OFFSET, which a live store would shift', async () => {
+    const http = sparqlHttp([row('32016R0679'), row('32019R0881')]);
+    const page = await new EulDataClient(http).enumerate({ limit: 2 });
+    expect(page.nextCursor).toBe('32019R0881');
+
+    const resumed = sparqlHttp([row('32022R2065')]);
+    await new EulDataClient(resumed).enumerate({ limit: 2, cursor: page.nextCursor as string });
+    const query = resumed.get.mock.calls[0]?.[1]?.params?.query as string;
+    expect(query).toContain('FILTER(STR(?celex) > "32019R0881")');
+  });
+
+  it('stops when a page comes back short', async () => {
+    const http = sparqlHttp([row('32016R0679')]);
+    const page = await new EulDataClient(http).enumerate({ limit: 5 });
+    expect(page.nextCursor).toBeUndefined();
+  });
+});

@@ -21,6 +21,7 @@ const RIGHTS = {
   access: 'public',
   fullTextStorage: 'allowed',
   redistribution: 'unknown',
+  licence: 'NOASSERTION',
 } as const;
 
 const SOURCE_APPLICATION: Record<string, RisApplication> = {

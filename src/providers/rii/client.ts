@@ -8,7 +8,16 @@ import type {
   LegalSearchPage,
   LegalSearchRequest,
 } from '../../contracts/legal-resource.js';
+import type {
+  CorpusEnumerationCapability,
+  CorpusEnumerationPage,
+  CorpusEnumerationRequest,
+} from '../../contracts/provider-capabilities.js';
 import { invalidateAllSessions } from '../../shared/clients/jportal.js';
+import {
+  decodeEnumerationCursor as decodeCursor,
+  encodeEnumerationCursor as encodeCursor,
+} from '../../shared/enumeration.js';
 import { RiiConverter } from './converter.js';
 import { BayernDecisionAdapter } from './adapters/bayern.js';
 import { BrandenburgDecisionAdapter } from './adapters/brandenburg.js';
@@ -33,6 +42,7 @@ export const PUBLIC_CASE_LAW_RIGHTS = {
   access: 'public',
   fullTextStorage: 'allowed',
   redistribution: 'unknown',
+  licence: 'NOASSERTION',
 } as const satisfies LegalResourceRights;
 
 export interface CaseLawSearchOptions {
@@ -83,7 +93,8 @@ export const GERMAN_CASE_LAW_CONFIGURATION: CaseLawClientConfiguration = {
   shutdown: invalidateAllSessions,
 };
 
-export class CaseLawClient implements LegalDataProvider<CaseLawReference> {
+export class CaseLawClient
+implements LegalDataProvider<CaseLawReference>, CorpusEnumerationCapability<CaseLawReference> {
   private readonly adapters: readonly DecisionAdapter[];
   private readonly adapterBySource = new Map<string, DecisionAdapter>();
 
@@ -199,20 +210,7 @@ export class CaseLawClient implements LegalDataProvider<CaseLawReference> {
     if (request.resourceTypes && !request.resourceTypes.includes('case-law')) {
       return { results: [], failures: [] };
     }
-    let requestedSources = request.sourceIds?.map((id) => {
-      const prefix = `${this.configuration.providerId}:`;
-      return id.startsWith(prefix) ? id.slice(prefix.length) : id;
-    });
-    if (request.jurisdictions) {
-      const jurisdictionSources = request.jurisdictions
-        .map(this.configuration.sourceForJurisdiction)
-        .filter((source): source is string =>
-          source !== undefined && this.adapterBySource.has(source)
-        );
-      requestedSources = requestedSources
-        ? requestedSources.filter((source) => jurisdictionSources.includes(source))
-        : jurisdictionSources;
-    }
+    const requestedSources = this.resolveSources(request.sourceIds, request.jurisdictions);
     const batch = await this.searchDecisions(request.query, {
       ...(requestedSources ? { sources: requestedSources } : {}),
       ...(request.limit === undefined ? {} : { limit: request.limit }),
@@ -227,11 +225,81 @@ export class CaseLawClient implements LegalDataProvider<CaseLawReference> {
     };
   }
 
+  /**
+   * Walk the enumerable sources, one at a time, resuming from `cursor`.
+   *
+   * Sequential rather than interleaved: each portal is a separate operator's
+   * server, and one walk at a time is the polite shape. Sources whose adapter
+   * cannot enumerate are reported as failures on the first page of a walk —
+   * once, not on every page — so a caller sees that coverage is partial
+   * without the notice repeating for the length of the corpus.
+   */
+  async enumerate(
+    request: CorpusEnumerationRequest = {},
+  ): Promise<CorpusEnumerationPage<CaseLawReference>> {
+    if (request.resourceTypes && !request.resourceTypes.includes('case-law')) {
+      return { results: [], failures: [], origin: 'native' };
+    }
+    const requested = this.resolveSources(request.sourceIds, request.jurisdictions) ?? this.sources;
+    const enumerable = requested.filter((source) => this.adapterBySource.get(source)?.enumerate);
+    const resumed = request.cursor ? decodeCursor(request.cursor) : undefined;
+    if (request.cursor && !resumed) {
+      throw new Error('Malformed enumeration cursor.');
+    }
+    // Unsupported sources are only worth stating when a walk begins; repeating
+    // them on every page would bury the real failures.
+    const failures = resumed ? [] : requested
+      .filter((source) => !enumerable.includes(source))
+      .map((source) => ({
+        sourceId: this.sourceId(source),
+        message: `Source ${source} does not support enumeration; its portal exposes no walkable listing.`,
+      }));
+
+    const startAt = resumed ? enumerable.indexOf(resumed.source) : 0;
+    if (startAt < 0) throw new Error(`Enumeration cursor names an unknown source: ${resumed?.source}`);
+
+    for (let index = startAt; index < enumerable.length; index++) {
+      const source = enumerable[index];
+      if (source === undefined) continue;
+      const adapter = this.adapterBySource.get(source);
+      if (!adapter?.enumerate) continue;
+      const page = await adapter.enumerate(source, {
+        ...(request.since ? { since: request.since } : {}),
+        ...(index === startAt && resumed?.cursor ? { cursor: resumed.cursor } : {}),
+        ...(request.limit === undefined ? {} : { limit: request.limit }),
+      });
+      const next = page.nextCursor
+        ? encodeCursor({ source, cursor: page.nextCursor })
+        : enumerable[index + 1] !== undefined
+          ? encodeCursor({ source: enumerable[index + 1] as string })
+          : undefined;
+      // An exhausted source that yielded nothing must not end the walk while
+      // later sources are still untouched.
+      if (page.results.length === 0 && next !== undefined) continue;
+      return {
+        results: page.results.map((result) => this.toReference({ ...result, source })),
+        failures,
+        ...(next ? { nextCursor: next } : {}),
+        origin: page.origin,
+      };
+    }
+    return { results: [], failures, origin: 'native' };
+  }
+
   async get(reference: CaseLawReference): Promise<LegalResourceDocument<CaseLawReference>> {
     const source = this.sourceFromReference(reference);
     const entry = await this.getDecision(source, reference.provenance.providerDocumentId);
+    // Fields a source publishes as tagged data rather than prose. Only the
+    // archive route supplies them, so they are merged onto the reference here
+    // instead of being threaded through the search-shaped `toReference`.
+    const published = {
+      ...(entry.chamber ? { chamber: entry.chamber } : {}),
+      ...(entry.documentType ? { documentType: entry.documentType } : {}),
+      ...(entry.norms?.length ? { citedNorms: entry.norms } : {}),
+      ...(entry.priorInstances?.length ? { priorInstances: entry.priorInstances } : {}),
+    };
     return {
-      reference: this.toReference({
+      reference: this.mergePublished(this.toReference({
         source,
         id: reference.provenance.providerDocumentId,
         title: entry.title || reference.title,
@@ -245,9 +313,16 @@ export class CaseLawClient implements LegalDataProvider<CaseLawReference> {
         ...((entry.url || reference.provenance.canonicalUrl)
           ? { url: entry.url || reference.provenance.canonicalUrl }
           : {}),
-      }),
+      }), published),
       content: { format: 'markdown', value: entry.content },
     };
+  }
+
+  private mergePublished(
+    reference: CaseLawReference,
+    published: Partial<CaseLawReference>,
+  ): CaseLawReference {
+    return Object.keys(published).length > 0 ? { ...reference, ...published } : reference;
   }
 
   shutdown(): void {
@@ -290,6 +365,29 @@ export class CaseLawClient implements LegalDataProvider<CaseLawReference> {
       .join(' ')
       .toLocaleLowerCase(this.configuration.locale);
     return terms.reduce((score, term) => score + (text.includes(term) ? 1 : 0), 0);
+  }
+
+  /**
+   * Narrow the walk or the search to the sources a request asks for, by
+   * explicit id or by jurisdiction. `undefined` means "no restriction stated".
+   */
+  private resolveSources(
+    sourceIds?: readonly string[],
+    jurisdictions?: readonly string[],
+  ): string[] | undefined {
+    const prefix = `${this.configuration.providerId}:`;
+    let sources = sourceIds?.map((id) => id.startsWith(prefix) ? id.slice(prefix.length) : id);
+    if (jurisdictions) {
+      const fromJurisdictions = jurisdictions
+        .map(this.configuration.sourceForJurisdiction)
+        .filter((source): source is string =>
+          source !== undefined && this.adapterBySource.has(source)
+        );
+      sources = sources
+        ? sources.filter((source) => fromJurisdictions.includes(source))
+        : fromJurisdictions;
+    }
+    return sources;
   }
 
   private sourceId(source: string): string {

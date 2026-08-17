@@ -7,10 +7,17 @@ import type {
   LegislationReference,
 } from '../../contracts/legal-resource.js';
 import type {
+  CorpusEnumerationCapability,
+  CorpusEnumerationPage,
+  CorpusEnumerationRequest,
   LegalTableOfContents,
   TableOfContentsCapability,
 } from '../../contracts/provider-capabilities.js';
 import { invalidateAllSessions } from '../../shared/clients/jportal.js';
+import {
+  decodeEnumerationCursor as decodeCursor,
+  encodeEnumerationCursor as encodeCursor,
+} from '../../shared/enumeration.js';
 import { BayernAdapter } from './adapters/bayern.js';
 import { BrandenburgAdapter } from './adapters/brandenburg.js';
 import { BremenAdapter } from './adapters/bremen.js';
@@ -32,6 +39,7 @@ export const PUBLIC_LEGISLATION_RIGHTS = {
   access: 'public',
   fullTextStorage: 'allowed',
   redistribution: 'unknown',
+  licence: 'NOASSERTION',
 } as const satisfies LegalResourceRights;
 
 export interface LegislationSearchOptions {
@@ -95,7 +103,8 @@ export const GERMAN_LEGISLATION_CONFIGURATION: LegislationClientConfiguration = 
 
 export class LegislationClient implements
   LegalDataProvider<LegislationReference>,
-  TableOfContentsCapability<LegislationReference> {
+  TableOfContentsCapability<LegislationReference>,
+  CorpusEnumerationCapability<LegislationReference> {
   private readonly adapterBySource = new Map<string, LegisAdapter>();
 
   constructor(
@@ -225,23 +234,8 @@ export class LegislationClient implements
     if (request.resourceTypes && !request.resourceTypes.includes('legislation')) {
       return { results: [], failures: [] };
     }
-    let requestedSources = request.sourceIds?.map((id) => {
-      const prefix = `${this.configuration.providerId}:`;
-      return id.startsWith(prefix) ? id.slice(prefix.length) : id;
-    });
-    if (request.jurisdictions) {
-      const jurisdictionSources = request.jurisdictions
-        .map(this.configuration.sourceForJurisdiction)
-        .filter((source): source is string =>
-          source !== undefined && this.adapterBySource.has(source)
-        );
-      requestedSources = requestedSources
-        ? requestedSources.filter((source) => jurisdictionSources.includes(source))
-        : jurisdictionSources;
-    }
-    requestedSources = requestedSources?.filter((source) =>
-      this.configuration.isSearchableSource?.(source) ?? true
-    );
+    const requestedSources = this.resolveSources(request.sourceIds, request.jurisdictions)
+      ?.filter((source) => this.configuration.isSearchableSource?.(source) ?? true);
     const batch = await this.searchLegislation(request.query, {
       ...(requestedSources ? { sources: requestedSources } : {}),
       ...(request.limit === undefined ? {} : { limit: request.limit }),
@@ -307,6 +301,83 @@ export class LegislationClient implements
       },
       rights: this.configuration.rights,
     };
+  }
+
+  /**
+   * Narrow to the sources a request names, by id or jurisdiction. Deliberately
+   * does not apply `isSearchableSource` — that filter belongs to `search`, and
+   * applying it here would exclude the one source that can be walked: GII is
+   * search-less and enumerable, exactly the inverse of the Länder portals.
+   */
+  private resolveSources(
+    sourceIds?: readonly string[],
+    jurisdictions?: readonly string[],
+  ): string[] | undefined {
+    const prefix = `${this.configuration.providerId}:`;
+    let sources = sourceIds?.map((id) => id.startsWith(prefix) ? id.slice(prefix.length) : id);
+    if (jurisdictions) {
+      const fromJurisdictions = jurisdictions
+        .map(this.configuration.sourceForJurisdiction)
+        .filter((source): source is string =>
+          source !== undefined && this.adapterBySource.has(source)
+        );
+      sources = sources
+        ? sources.filter((source) => fromJurisdictions.includes(source))
+        : fromJurisdictions;
+    }
+    return sources;
+  }
+
+  /**
+   * Walk the enumerable sources in turn. See `CaseLawClient.enumerate` — the
+   * shape is deliberately identical, so an ingest loop drives both providers
+   * through one code path.
+   */
+  async enumerate(
+    request: CorpusEnumerationRequest = {},
+  ): Promise<CorpusEnumerationPage<LegislationReference>> {
+    if (request.resourceTypes && !request.resourceTypes.includes('legislation')) {
+      return { results: [], failures: [], origin: 'native' };
+    }
+    const requested = this.resolveSources(request.sourceIds, request.jurisdictions) ?? this.sources;
+    const enumerable = requested.filter((source) => this.adapterBySource.get(source)?.enumerate);
+    const resumed = request.cursor ? decodeCursor(request.cursor) : undefined;
+    if (request.cursor && !resumed) throw new Error('Malformed enumeration cursor.');
+
+    const failures = resumed ? [] : requested
+      .filter((source) => !enumerable.includes(source))
+      .map((source) => ({
+        sourceId: this.sourceId(source),
+        message: `Source ${source} does not support enumeration; its portal exposes no walkable listing.`,
+      }));
+
+    const startAt = resumed ? enumerable.indexOf(resumed.source) : 0;
+    if (startAt < 0) throw new Error(`Enumeration cursor names an unknown source: ${resumed?.source}`);
+
+    for (let index = startAt; index < enumerable.length; index++) {
+      const source = enumerable[index];
+      if (source === undefined) continue;
+      const adapter = this.adapterBySource.get(source);
+      if (!adapter?.enumerate) continue;
+      const page = await adapter.enumerate(source, {
+        ...(request.since ? { since: request.since } : {}),
+        ...(index === startAt && resumed?.cursor ? { cursor: resumed.cursor } : {}),
+        ...(request.limit === undefined ? {} : { limit: request.limit }),
+      });
+      const next = page.nextCursor
+        ? encodeCursor({ source, cursor: page.nextCursor })
+        : enumerable[index + 1] !== undefined
+          ? encodeCursor({ source: enumerable[index + 1] as string })
+          : undefined;
+      if (page.results.length === 0 && next !== undefined) continue;
+      return {
+        results: page.results.map((result) => this.toReference({ ...result, source })),
+        failures,
+        ...(next ? { nextCursor: next } : {}),
+        origin: page.origin,
+      };
+    }
+    return { results: [], failures, origin: 'native' };
   }
 
   private sourceId(source: string): string {

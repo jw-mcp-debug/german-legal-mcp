@@ -26,6 +26,7 @@ const RIGHTS = {
   access: 'credentialed',
   fullTextStorage: 'cache-only',
   redistribution: 'prohibited',
+  licence: 'LicenseRef-Nautos-Credentialed',
 } as const;
 
 export interface NautosAuthenticationAdapter {

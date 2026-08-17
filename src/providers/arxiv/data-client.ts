@@ -12,6 +12,7 @@ const RIGHTS = {
   access: 'public',
   fullTextStorage: 'unknown',
   redistribution: 'metadata-only',
+  licence: 'NOASSERTION',
 } as const;
 
 export class ArxivDataClient implements LegalDataProvider<LiteratureReference> {

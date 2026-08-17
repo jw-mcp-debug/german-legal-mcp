@@ -16,6 +16,7 @@ export interface ProviderRuntimeCapabilities {
   readonly tableOfContents: boolean;
   readonly authentication: boolean;
   readonly status: boolean;
+  readonly enumeration: boolean;
 }
 
 export interface ProviderComponentMetadata {
