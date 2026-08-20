@@ -9,6 +9,8 @@ vi.mock('axios', () => ({
 }));
 
 import axios from 'axios';
+import { jportalGetDocument } from './jportal.js';
+import { ValidationError } from '../errors.js';
 const mockPost = vi.mocked(axios.post);
 
 /** The `/init` handshake every call goes through before it can search. */
@@ -108,5 +110,40 @@ describe('jportalDecisionSearch result mapping', () => {
       court: 'LAG Hamburg 2. Kammer',
       fileNumber: '5 Sa 12/24',
     });
+  });
+});
+
+describe('jportalGetDocument error mapping', () => {
+  beforeEach(() => { mockPost.mockReset(); });
+
+  /** R3 reports both a bad id and its own faults as HTTP 500; only the body differs. */
+  function mockDocumentFailure(msgId: string) {
+    mockSession();
+    mockPost.mockRejectedValueOnce({
+      isAxiosError: true,
+      message: 'Request failed with status code 500',
+      response: { status: 500, statusText: '', data: { msgId } },
+    } as never);
+  }
+
+  it('reports an id the portal rejects as invalid input, not as a network fault', async () => {
+    mockDocumentFailure('validation');
+
+    const error = await jportalGetDocument('BE', 'BerlHG/110').catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ValidationError);
+    expect((error as ValidationError).message).toContain('"BerlHG/110" is not a BE document id');
+    // The caller needs to know where a real id comes from.
+    expect((error as ValidationError).message).toContain('legis:toc');
+  });
+
+  it('leaves a portal-side failure alone rather than blaming the caller', async () => {
+    mockDocumentFailure('internal');
+
+    const error = await jportalGetDocument('BE', 'jlr-NNLBE99999999').catch((e: unknown) => e);
+
+    // A well-formed id for a missing document looks exactly like an outage here,
+    // so this must not be dressed up as a validation problem.
+    expect(error).not.toBeInstanceOf(ValidationError);
   });
 });
