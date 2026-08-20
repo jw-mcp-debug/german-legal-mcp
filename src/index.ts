@@ -16,6 +16,7 @@ import { ConfigurationError } from './config.js';
 import { PROVIDER_MANIFEST } from './provider-manifest.js';
 import { ProviderRegistry } from './provider-registry.js';
 import { looksLikeToolInvocation, runCli } from './cli.js';
+import { createMcpHttpListener, readHttpConfig } from './http.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -87,59 +88,71 @@ For more information, visit:
 
 const providerRegistry = new ProviderRegistry(PROVIDER_MANIFEST);
 
-// Create MCP server
-const server = new Server(
-  {
-    name: "german-legal-mcp",
-    version: pkg.version,
-  },
-  {
-    capabilities: {
-      tools: {},
+/**
+ * A server object wired to the shared provider registry.
+ *
+ * stdio needs exactly one of these for the life of the process. HTTP needs one
+ * per request, because the SDK pairs a server with a transport one-to-one — so
+ * this is a factory rather than a singleton. Only the handler registrations are
+ * per-server; the registry behind them, which holds the adapters and their
+ * caches, is created once above.
+ */
+function createMcpServer(): Server {
+  const server = new Server(
+    {
+      name: "german-legal-mcp",
+      version: pkg.version,
     },
-  }
-);
+    {
+      capabilities: {
+        tools: {},
+      },
+    }
+  );
 
-server.setRequestHandler(ListToolsRequestSchema, async () => {
-  const tools = providerRegistry.getTools();
-  return {
-    tools: tools.map((tool) => ({
-      name: tool.name,
-      description: tool.description,
-      inputSchema: (tool.inputSchema as z.ZodTypeAny).toJSONSchema(),
-    })),
-  };
-});
+  server.setRequestHandler(ListToolsRequestSchema, async () => {
+    const tools = providerRegistry.getTools();
+    return {
+      tools: tools.map((tool) => ({
+        name: tool.name,
+        description: tool.description,
+        inputSchema: (tool.inputSchema as z.ZodTypeAny).toJSONSchema(),
+      })),
+    };
+  });
 
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  const requestId = uuidv4();
-  const logger = rootLogger.child({ requestId });
-  const { name, arguments: args } = request.params;
+  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    const requestId = uuidv4();
+    const logger = rootLogger.child({ requestId });
+    const { name, arguments: args } = request.params;
   
-  logger.info('Tool call received', { tool: name });
-  const startTime = Date.now();
+    logger.info('Tool call received', { tool: name });
+    const startTime = Date.now();
   
-  try {
-    const result = await providerRegistry.handleToolCall(
-      name,
-      (args as Record<string, unknown>) || {},
-    );
-    const duration = Date.now() - startTime;
-    logger.info('Tool call completed', { tool: name, duration });
+    try {
+      const result = await providerRegistry.handleToolCall(
+        name,
+        (args as Record<string, unknown>) || {},
+      );
+      const duration = Date.now() - startTime;
+      logger.info('Tool call completed', { tool: name, duration });
     
-    return {
-      content: result.content,
-      isError: result.isError,
-    };
-  } catch (error) {
-    const duration = Date.now() - startTime;
-    logger.error('Tool call failed', error as Error, { tool: name, duration });
-    return {
-      content: [{ type: 'text', text: formatToolCallError(error) }],
-      isError: true,
-    };
-  }
-});
+      return {
+        content: result.content,
+        isError: result.isError,
+      };
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      logger.error('Tool call failed', error as Error, { tool: name, duration });
+      return {
+        content: [{ type: 'text', text: formatToolCallError(error) }],
+        isError: true,
+      };
+    }
+  });
+
+  return server;
+}
 
 // Graceful shutdown
 let isShuttingDown = false;
@@ -184,7 +197,18 @@ process.on("uncaughtException", (error) => fatal("uncaught exception", error));
 process.on("unhandledRejection", (reason) => fatal("unhandled rejection", reason));
 process.on("SIGINT", () => cleanup("SIGINT"));
 process.on("SIGTERM", () => cleanup("SIGTERM"));
-process.stdin.on("close", () => cleanup("stdin close"));
+
+// Read before any transport starts: the shutdown hooks differ by mode, and a
+// misconfigured HTTP mode must fail here rather than after the providers load.
+const httpConfig = readHttpConfig();
+
+// A closed stdin means the host let go of the pipe — the end of the session for
+// a stdio server, and nothing at all for an HTTP one, where a platform may hand
+// the process a closed stdin from the start. Registering it unconditionally
+// would shut the web service down as it came up.
+if (!httpConfig) {
+  process.stdin.on("close", () => cleanup("stdin close"));
+}
 
 // A provider that fails to load or is misconfigured disables ONLY itself (with a
 // warning) — it never aborts the server, so the remaining providers stay usable.
@@ -203,6 +227,12 @@ rootLogger.info(
   `Active providers (${activeProviders.length}): ${activeProviders.map((p) => p.name).join(', ') || 'none'}`,
 );
 
-const transport = new StdioServerTransport();
-await server.connect(transport);
-rootLogger.info('MCP server connected and ready');
+if (httpConfig) {
+  const listener = createMcpHttpListener(createMcpServer, httpConfig);
+  await new Promise<void>((resolve) => listener.listen(httpConfig.port, resolve));
+  rootLogger.info('MCP server listening over HTTP', { port: httpConfig.port, path: '/mcp' });
+} else {
+  const transport = new StdioServerTransport();
+  await createMcpServer().connect(transport);
+  rootLogger.info('MCP server connected and ready');
+}
