@@ -5,6 +5,7 @@ import {
   jportalGetDocument,
   JPORTAL_STATES,
   type JPortalSearchResult,
+  type JPortalDocument,
 } from '../../../shared/clients/jportal.js';
 import type { LegisAdapter, SearchResult, LegisEntry, TocEntry } from '../types.js';
 import { rankSearchResults, type RankableSearchResult } from './search-ranking.js';
@@ -25,6 +26,15 @@ const MAX_SEARCH_RESULTS_TO_RERANK = 200;
 const IN_FORCE_DOC_PART = 'S';
 /** Full text of a law, as opposed to "S", the framing document with its metadata. */
 const FULL_LAW_DOC_PART = 'X';
+/**
+ * The full-law document is the only place the section ids are published, and it
+ * is large — 673 KB for the BerlHG. Both `toc` and a law-level `get` need it,
+ * and a reader typically calls them in sequence on the same law, so it is held
+ * for an hour rather than fetched twice. The Länder portals disallow automated
+ * agents in robots.txt; asking them once per law per hour is the least this
+ * adapter can do about that.
+ */
+const FULL_LAW_TTL_MS = 60 * 60 * 1000;
 const SECTION_TITLE = /^(§{1,2}\s*\S+|Art\.?\s*\S+|Artikel\s*\S+)\s*[-–—]\s*(.*)$/;
 const STRUCTURAL_HEADING = /\b(Abschnitt|Kapitel|Teil|Buch|Titel|Untertitel|Anlage)\b/;
 
@@ -140,6 +150,12 @@ function toSearchResult(result: JPortalRankableResult): SearchResult {
   };
 }
 
+/** Drops the three permalink blocks the framing document ends in; they are boilerplate. */
+function withoutPermalinkBlocks(markdown: string): string {
+  const permalink = markdown.search(/^#{1,6}\s*Permalink\s*$/m);
+  return (permalink === -1 ? markdown : markdown.slice(0, permalink)).trimEnd();
+}
+
 /**
  * jPortal renders a law's "Nichtamtliches Inhaltsverzeichnis" as a two-column
  * table — title, valid-from — in which every title links to the norm's own
@@ -190,6 +206,8 @@ function parseTableOfContents(html: string, lawId: string): TocEntry[] {
 export class JPortalAdapter implements LegisAdapter {
   readonly states = JPORTAL_STATES;
 
+  private readonly fullLaws = new Map<string, { fetchedAt: number; document: JPortalDocument }>();
+
   async search(state: string, query: string, limit: number): Promise<SearchResult[]> {
     const expandedLimit = Math.min(MAX_SEARCH_RESULTS_TO_RERANK, Math.max(limit, limit * SEARCH_EXPANSION_FACTOR));
     const results = await jportalSearch(state, query, expandedLimit);
@@ -199,6 +217,10 @@ export class JPortalAdapter implements LegisAdapter {
 
   async get(state: string, id: string): Promise<LegisEntry> {
     const doc = await jportalGetDocument(state, id);
+    if (isRootDocument(id)) {
+      const law = await this.renderLaw(state, id, doc);
+      if (law) return law;
+    }
 
     const metadata = extractMetadata(doc.head);
     const $ = cheerio.load(doc.text);
@@ -215,9 +237,66 @@ export class JPortalAdapter implements LegisAdapter {
     };
   }
 
+  /**
+   * A law's masthead and the sections it contains — not its full text.
+   *
+   * The framing document alone, which is what this used to return, is 2,6 KB of
+   * Fundstelle and permalinks: correct, and useless to someone who asked for the
+   * law. Joining every section instead would produce a document nobody asked
+   * for, so this follows the federal adapter and answers with the masthead plus
+   * a section list. Each entry carries its own id, so the list is a directory
+   * rather than a promise; the section texts come from `get` on those ids.
+   *
+   * Returns undefined when the law publishes no linked contents — a short
+   * Verordnung often does not — and the caller then renders the framing
+   * document as before rather than an empty list.
+   */
+  private async renderLaw(
+    state: string,
+    lawId: string,
+    framing: JPortalDocument,
+  ): Promise<LegisEntry | undefined> {
+    const entries = await this.toc(state, lawId);
+    if (entries.length === 0) return undefined;
+
+    const $ = cheerio.load(framing.text);
+    $('a[name]').not('[href]').remove();
+    $('comment, .docLayoutNavigation').remove();
+    const preamble = withoutPermalinkBlocks(turndown.turndown($.html() || ''));
+    const metadata = extractMetadata(framing.head);
+
+    const sections = entries.map((entry) => {
+      const label = [entry.num, entry.title].filter(Boolean).join(' ');
+      const indent = '  '.repeat(entry.depth);
+      return entry.id ? `${indent}- ${label} — \`${entry.id}\`` : `${indent}- ${label}`;
+    });
+
+    return {
+      title: framing.title,
+      content: [
+        ...(metadata ? [metadata, '', '---', ''] : []),
+        ...(preamble ? [preamble, ''] : []),
+        '## Inhaltsübersicht',
+        '',
+        ...sections,
+      ].join('\n'),
+      url: framing.permalink,
+    };
+  }
+
   async toc(state: string, id: string): Promise<TocEntry[]> {
     const lawId = rootDocId(id);
-    const doc = await jportalGetDocument(state, lawId, FULL_LAW_DOC_PART);
+    const doc = await this.fullLawDocument(state, lawId);
     return parseTableOfContents(doc.text, lawId);
+  }
+
+  private async fullLawDocument(state: string, lawId: string): Promise<JPortalDocument> {
+    const key = `${state}:${lawId}`;
+    const cached = this.fullLaws.get(key);
+    if (cached && Date.now() - cached.fetchedAt < FULL_LAW_TTL_MS) return cached.document;
+
+    const document = await jportalGetDocument(state, lawId, FULL_LAW_DOC_PART);
+    this.fullLaws.set(key, { fetchedAt: Date.now(), document });
+    return document;
   }
 }
