@@ -231,9 +231,9 @@ the adapter discarded.
 
 Deliberately not changed: a law-level id still does not return the law's full
 text — the federal adapter answers a bare slug with masthead plus sections for
-the same reason, and `docPart X` is 673 KB for the BerlHG. An unknown-but-well-
-formed docId still raises a transport error, because the portal reports it
-identically to its own outages.
+the same reason, and `docPart X` is 673 KB for the BerlHG. A docId that is
+well-formed but unknown still raises a transport error, because the portal
+reports it identically to its own outages.
 
 Verified against gesetze.berlin.de, gesetze-im-internet.de and
 rechtsprechung-im-internet.de. `lint`, `typecheck`, `typecheck:live`, `build`,
