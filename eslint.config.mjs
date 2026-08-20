@@ -21,6 +21,8 @@ export default [
         HTMLElement: 'readonly',
         HTMLAnchorElement: 'readonly',
         Buffer: 'readonly',
+        // Global since Node 18; package.json requires >= 25.
+        fetch: 'readonly',
         __dirname: 'readonly',
         __filename: 'readonly',
       },
