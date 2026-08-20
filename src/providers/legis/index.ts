@@ -110,10 +110,13 @@ export class LegisProvider implements Provider {
     entries = this.filterRange(entries, from, to);
     const lines = entries.map((entry) => {
       const indent = '  '.repeat(entry.depth);
-      if (!entry.num) return `${indent}**${entry.title}**`;
+      // An entry that carries its own id is directly retrievable; printing it
+      // saves the reader a second search to find out how to ask for it.
+      const suffix = entry.id ? ` — \`${entry.id}\`` : '';
+      if (!entry.num) return `${indent}**${entry.title}**${suffix}`;
       return entry.title
-        ? `${indent}${entry.num} ${entry.title}`
-        : `${indent}${entry.num}`;
+        ? `${indent}${entry.num} ${entry.title}${suffix}`
+        : `${indent}${entry.num}${suffix}`;
     });
     return {
       content: [{

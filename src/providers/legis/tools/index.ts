@@ -11,6 +11,8 @@ export const legisTools: ToolDefinition[] = [
       'Search German state legislation (Landesrecht) by keyword. ' +
       'Returns results with IDs for retrieval via legis:get. ' +
       'Official abbreviations such as "HKG" or "PolG" are often more reliable than descriptive phrases. ' +
+      'A hit is either a whole law or a single norm, and its id retrieves exactly that, so naming the section — "§ 110 BerlHG" — is the way to reach one. ' +
+      'Where a norm has earlier fassungen the in-force one is listed and the rest are counted in the subtitle. ' +
       'Covers all 16 Bundesländer. BUND does not support search — use legis:get directly.',
     inputSchema: z.object({
       query: z.string().describe('Search query (e.g., "Polizeigesetz", "Schulgesetz", "PolG")'),
@@ -39,8 +41,9 @@ export const legisTools: ToolDefinition[] = [
     description:
       'Get table of contents for a law — compact list of section numbers and headings. ' +
       'Much lighter than legis:get for navigating large laws. ' +
+      'Entries print a document id where the source publishes one; that id goes straight back into legis:get. ' +
       'BUND: id is just the law abbreviation (e.g., "bgb", "stgb"). ' +
-      'Länder: id from legis:search results.',
+      'Länder: id from legis:search results — the id of a single norm is accepted and read as its law.',
     inputSchema: z.object({
       id: z.string().describe('Law identifier. BUND: law abbreviation (e.g., "bgb"). Länder: ID from legis:search.'),
       state: stateEnum.describe('Jurisdiction (e.g., "BUND", "BW", "NW")'),

@@ -22,6 +22,13 @@ export interface TocEntry {
   depth: number;
   num: string;
   title: string;
+  /**
+   * Document id of the entry, for sources whose table of contents links its
+   * norms. Where present it is a `legis:get` id, which turns the table of
+   * contents into a directory: read it once, then fetch a section by id
+   * instead of guessing how the source spells it.
+   */
+  id?: string;
 }
 
 export interface LegisEnumerationRequest {
