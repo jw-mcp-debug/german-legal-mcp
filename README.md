@@ -10,6 +10,14 @@ German, Austrian &amp; EU legal research — legislation, case law, parliamentar
 
 </div>
 
+> **This is a fork**
+>
+> Forked from [metaneutrons/german-legal-mcp](https://github.com/metaneutrons/german-legal-mcp)
+> to make the ten jPortal Länder portals usable at the level of a single norm.
+> Nothing here is published to npm — `npx @metaneutrons/german-legal-mcp` still
+> installs upstream. See [What this fork changes](#what-this-fork-changes) and
+> [Running this fork](#running-this-fork).
+
 > **Production status**
 >
 > Version 3.2.1 provides production-ready provider contracts, application
@@ -200,7 +208,66 @@ The easiest way to use this server in [Claude Desktop](https://claude.ai/downloa
 
 The bundle ships the public, no-authentication sources and is cross-platform (macOS and Windows, Apple Silicon and Intel) — Claude Desktop supplies the Node.js runtime, so a single download works everywhere.
 
+## What this fork changes
+
+Upstream returned a usable search and an unusable id for the ten jPortal
+Länder (BW, BE, HH, HE, MV, RP, SL, SH, ST, TH). Every hit — including a hit on
+a single § — was rewritten to the root document of its law before leaving the
+adapter, so a search for `§ 110 BerlHG` and a search for `BerlHG` produced the
+same id, and that id resolves to the framing document: Fundstelle,
+Gliederungs-Nr, permalinks, no legal text. `legis:toc` reported zero entries for
+every jPortal law. The norm text was in the portal all along, under the docId
+the adapter discarded.
+
+| Change | Effect |
+|---|---|
+| Keep the portal's docId | `legis:search "§ 110 BerlHG"` returns the norm's own id, and `legis:get` on it returns the section text |
+| Read `docPart` | R3 marks the fassung in force `S` and superseded ones `s`; the in-force text is listed and the rest counted, instead of whichever came first |
+| `toc()` for jPortal | Reads the law's "Nichtamtliches Inhaltsverzeichnis"; the BerlHG yields 190 entries, each carrying a `legis:get` id |
+| Law-level `get` | Masthead, the law's "letzte berücksichtigte Änderung" line and its section list — 16.614 characters where the framing document gave 2.598 |
+| Full-law cache | One hour per state and law, on the adapter instance; a `get` followed by a `toc` drops from two 673 KB fetches to one |
+| Actionable id errors | A malformed docId raises a ValidationError naming the id, instead of "Network request failed — check your internet connection" |
+| Decision permalinks | `rii:get_decision` closes with `**Source:**`, as `legis:get` always has |
+
+Deliberately not changed: a law-level id still does not return the law's full
+text — the federal adapter answers a bare slug with masthead plus sections for
+the same reason, and `docPart X` is 673 KB for the BerlHG. A docId that is
+well-formed but unknown still raises a transport error, because the portal
+reports it identically to its own outages.
+
+Verified against gesetze.berlin.de, gesetze-im-internet.de and
+rechtsprechung-im-internet.de. `lint`, `typecheck`, `typecheck:live`, `build`,
+`test:package` and `test:smoke` clean; 426 tests pass.
+
+## Running this fork
+
+Build from source and point your MCP client at the build:
+
+```bash
+git clone https://github.com/jw-mcp-debug/german-legal-mcp.git
+cd german-legal-mcp
+npm install && npm run build
+```
+
+```json
+{
+  "mcpServers": {
+    "german-legal": {
+      "command": "node",
+      "args": ["/absolute/path/to/german-legal-mcp/dist/index.js"]
+    }
+  }
+}
+```
+
+Note that `npm run build` starts with `rm -rf dist`, so the entry point is
+briefly absent while a build runs. Upstream releases no longer arrive on their
+own; pull and rebuild to pick them up.
+
 ## Quick Start with npx
+
+This installs the upstream package, not this fork — see
+[Running this fork](#running-this-fork) for the fork.
 
 ```bash
 npx @metaneutrons/german-legal-mcp
