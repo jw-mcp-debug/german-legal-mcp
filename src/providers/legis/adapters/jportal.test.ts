@@ -138,6 +138,40 @@ describe('JPortalAdapter', () => {
     expect(entry.content).toContain('Body');
   });
 
+  it('answers a law-level id with its masthead and section list, not just the framing document', async () => {
+    const link = JSON.stringify({ linkMeta: { docId: 'jlr-Foo', part: 'X', anchor: 'jlr-FooNN00000000014' } })
+      .replace(/"/g, '&#34;');
+    jportalGetDocument.mockResolvedValue({
+      head: '<table><tr><th>Amtliche Abkürzung:</th><td>HGes</td></tr></table>',
+      text: '<div class="jwsinhaltsverzeichnis"><table>'
+        + `<tr><td><a data-juris-link="${link}">§\u00a01 - Geltungsbereich</a></td><td>2020</td></tr>`
+        + '</table></div>',
+      title: 'HGes',
+      permalink: 'https://example.test/jlr-Foo',
+    });
+
+    const entry = await new JPortalAdapter().get('HE', 'jlr-Foo');
+
+    expect(entry.content).toContain('**Amtliche Abkürzung:** HGes');
+    expect(entry.content).toContain('## Inhaltsübersicht');
+    // The id is what makes the list a directory rather than a promise.
+    expect(entry.content).toContain('- § 1 Geltungsbereich — `jlr-FooNN00000000014`');
+  });
+
+  it('falls back to the framing document for a law without linked contents', async () => {
+    jportalGetDocument.mockResolvedValue({
+      head: '<table><tr><th>Gültig bis:</th><td>03.02.2026</td></tr></table>',
+      text: '<p>Aufgehobene Verordnung ohne Inhaltsverzeichnis.</p>',
+      title: 'MAVO',
+      permalink: 'u',
+    });
+
+    const entry = await new JPortalAdapter().get('BE', 'jlr-Bar');
+
+    expect(entry.content).not.toContain('## Inhaltsübersicht');
+    expect(entry.content).toContain('Aufgehobene Verordnung');
+  });
+
   describe('toc', () => {
     // Shape of the real "Nichtamtliches Inhaltsverzeichnis": a two-column table
     // whose titles link to each norm's own docId through a JSON link payload.
@@ -182,6 +216,31 @@ describe('JPortalAdapter', () => {
       await new JPortalAdapter().toc('HE', 'jlr-FooNN00000000353');
 
       expect(jportalGetDocument).toHaveBeenCalledWith('HE', 'jlr-Foo', 'X');
+    });
+
+    it('serves a second reader from the cache instead of refetching the law', async () => {
+      jportalGetDocument.mockResolvedValue({
+        head: '', text: TOC_HTML, title: 'HGes', permalink: 'u',
+      });
+      const adapter = new JPortalAdapter();
+
+      await adapter.toc('HE', 'jlr-Foo');
+      await adapter.toc('HE', 'jlr-FooNN00000000353');
+
+      // Same law, one request: the full-law document is 673 KB for the BerlHG.
+      expect(jportalGetDocument).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps the cache per state, so two portals are not confused', async () => {
+      jportalGetDocument.mockResolvedValue({
+        head: '', text: TOC_HTML, title: 'HGes', permalink: 'u',
+      });
+      const adapter = new JPortalAdapter();
+
+      await adapter.toc('HE', 'jlr-Foo');
+      await adapter.toc('RP', 'jlr-Foo');
+
+      expect(jportalGetDocument).toHaveBeenCalledTimes(2);
     });
 
     it('returns nothing rather than guessing when the law publishes no linked contents', async () => {

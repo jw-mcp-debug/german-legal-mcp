@@ -193,7 +193,10 @@ export class RiiProvider implements Provider {
       `**Datum:** ${decision.date}`,
       `**Aktenzeichen:** ${decision.fileNumber}`,
       decision.ecli ? `**ECLI:** ${decision.ecli}` : '',
-    ].filter(Boolean).join('\n') + `\n\n---\n\n${decision.content}`;
+    ].filter(Boolean).join('\n') + `\n\n---\n\n${decision.content}`
+      // Every adapter resolves a decision's own page; printing it is what makes
+      // a quotation from this tool checkable, and legis:get has always done it.
+      + (decision.url ? `\n\n---\n**Source:** ${decision.url}` : '');
 
     if (save_path) {
       return saveToFile(

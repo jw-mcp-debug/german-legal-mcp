@@ -44,6 +44,19 @@ describe('RiiProvider', () => {
       .resolves.toMatchObject({ isError: true });
   });
 
+  it('prints the decision\'s own page so a quotation from it can be checked', async () => {
+    const provider = new RiiProvider(http(), new RiiConverter());
+
+    const result = await provider.handleToolCall('rii:get_decision', {
+      doc_id: 'case-1',
+      source: 'BUND',
+    });
+
+    expect(result.content[0].text).toContain(
+      '**Source:** https://www.rechtsprechung-im-internet.de/jportal/portal/page/bsjrsprod.psml?doc.id=case-1',
+    );
+  });
+
   it('consolidates ALL sources in parallel, deduplicates, and isolates portal failures', async () => {
     const adapters: DecisionAdapter[] = [
       { sources: ['BUND'], search: async () => [{ id: 'same', title: 'VwVfG Entscheidung', subtitle: 'Bund', date: '2024', court: 'VG', fileNumber: '1 A 1/24' }], get: vi.fn() },

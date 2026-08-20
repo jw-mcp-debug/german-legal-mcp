@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { rootLogger } from '../logger.js';
+import { ValidationError } from '../errors.js';
 
 const logger = rootLogger.child({ module: 'jportal-client' });
 
@@ -240,10 +241,49 @@ export async function jportalDecisionSearch(
   });
 }
 
+/**
+ * R3 answers a malformed document id with HTTP 500, the same status it uses for
+ * its own faults, and separates the two only in the body: `msgId: "validation"`
+ * carries "Ungültiges Format der DokID". Without reading that, an id the caller
+ * invented — "BerlHG/110", or a law id with the section appended — surfaced as
+ * NetworkError, whose advice is to check the internet connection. The id was
+ * the problem, and only the caller can fix it.
+ *
+ * A well-formed id for a document that does not exist answers `msgId:
+ * "internal"`, which a genuine portal fault also produces. Those stay a
+ * NetworkError rather than being guessed at.
+ */
+function malformedDocumentId(state: string, docId: string, error: unknown): ValidationError | null {
+  if (!axios.isAxiosError(error)) return null;
+  const data = error.response?.data as { msgId?: string } | undefined;
+  if (data?.msgId !== 'validation') return null;
+
+  return new ValidationError(
+    `"${docId}" is not a ${state} document id. Länder ids are opaque portal ids `
+    + '(e.g. "jlr-NNLBE00004834NN00000000353"); they come from legis:search, or from '
+    + 'legis:toc, which lists the id of every section of a law. A section cannot be '
+    + 'addressed by appending it to a law id.',
+    'id',
+    error,
+  );
+}
+
 export async function jportalGetDocument(
   state: string,
   docId: string,
   docPart = 'S',
+): Promise<JPortalDocument> {
+  try {
+    return await documentRequest(state, docId, docPart);
+  } catch (error) {
+    throw malformedDocumentId(state, docId, error) ?? error;
+  }
+}
+
+async function documentRequest(
+  state: string,
+  docId: string,
+  docPart: string,
 ): Promise<JPortalDocument> {
   return withRetry(state, async (session) => {
     const response = await axios.post(
