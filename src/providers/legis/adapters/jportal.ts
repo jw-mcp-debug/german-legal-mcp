@@ -6,13 +6,35 @@ import {
   JPORTAL_STATES,
   type JPortalSearchResult,
 } from '../../../shared/clients/jportal.js';
-import type { LegisAdapter, SearchResult, LegisEntry } from '../types.js';
+import type { LegisAdapter, SearchResult, LegisEntry, TocEntry } from '../types.js';
 import { rankSearchResults, type RankableSearchResult } from './search-ranking.js';
 
 const turndown = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced' });
 const JPORTAL_SECTION_SUFFIX = /NN\d{8,12}$/;
 const SEARCH_EXPANSION_FACTOR = 20;
 const MAX_SEARCH_RESULTS_TO_RERANK = 200;
+/**
+ * R3 marks the version of a norm that is currently in force with docPart "S"
+ * and every superseded version of the same norm with lowercase "s". Retrieval
+ * does not need the distinction — the docId already identifies the version, and
+ * a superseded norm answers to "S" just as well — but a result list does: a
+ * search for "§ 110 BerlHG" returns the in-force text once and its five earlier
+ * fassungen alongside it, and picking whichever came first put a repealed text
+ * in front of the reader.
+ */
+const IN_FORCE_DOC_PART = 'S';
+/** Full text of a law, as opposed to "S", the framing document with its metadata. */
+const FULL_LAW_DOC_PART = 'X';
+const SECTION_TITLE = /^(§{1,2}\s*\S+|Art\.?\s*\S+|Artikel\s*\S+)\s*[-–—]\s*(.*)$/;
+const STRUCTURAL_HEADING = /\b(Abschnitt|Kapitel|Teil|Buch|Titel|Untertitel|Anlage)\b/;
+
+interface JPortalRankableResult extends RankableSearchResult {
+  /** Root document of the law this hit belongs to; sections group under it. */
+  readonly lawId: string;
+  /** Identifies one norm across its fassungen, e.g. "110 berlhg". Empty for a law. */
+  readonly sectionKey: string;
+  readonly inForce: boolean;
+}
 
 function extractMetadata(headHtml: string): string {
   const $ = cheerio.load(headHtml);
@@ -33,6 +55,12 @@ function isRootDocument(docId: string): boolean {
   return rootDocId(docId) === docId;
 }
 
+function normalizeSpace(value: string): string {
+  // Section numbers arrive as "\u00a0110" — a non-breaking space, which
+  // `\s` matches, so collapsing whitespace also normalizes them.
+  return value.replace(/\s+/g, ' ').trim();
+}
+
 function extractRootTitle(result: JPortalSearchResult): string {
   if (isRootDocument(result.docId)) return result.title;
 
@@ -47,33 +75,63 @@ function extractRootTitle(result: JPortalSearchResult): string {
   return lawTitle ?? result.title;
 }
 
-function toRankableResult(result: JPortalSearchResult): RankableSearchResult {
-  const root = rootDocId(result.docId);
-  const title = extractRootTitle(result);
+function toRankableResult(result: JPortalSearchResult): JPortalRankableResult {
+  const lawId = rootDocId(result.docId);
   const isRoot = isRootDocument(result.docId);
+  const lawTitle = extractRootTitle(result);
 
   return {
-    id: root,
-    title,
-    subtitle: isRoot ? result.subtitle : `${result.title} | ${result.subtitle}`,
+    // The portal's own docId, section suffix intact. Stripping it to `lawId`
+    // here is what left `legis:get` unable to reach a single norm: every hit in
+    // a law collapsed onto one id, and that id resolves to the framing document.
+    id: result.docId,
+    title: result.title,
+    subtitle: result.subtitle,
     date: result.date,
-    rankText: `${title} ${result.title} ${result.subtitle}`,
+    rankText: `${lawTitle} ${result.title} ${result.subtitle}`,
     isRootDocument: isRoot,
+    lawId,
+    sectionKey: isRoot ? '' : normalizeSpace(result.title).toLowerCase(),
+    inForce: result.docPart === IN_FORCE_DOC_PART,
   };
 }
 
-function dedupeById(results: readonly RankableSearchResult[]): RankableSearchResult[] {
-  const deduped = new Map<string, RankableSearchResult>();
+/**
+ * One row per norm, not per fassung — and none at all for a law whose own root
+ * document is among the hits, since that document already stands for its
+ * sections. Superseded fassungen are counted rather than listed; their docIds
+ * stay reachable through the portal, and listing six near-identical rows for
+ * one § would crowd out every other law in a ten-result page.
+ */
+function collapseToDistinctNorms(
+  results: readonly JPortalRankableResult[],
+): JPortalRankableResult[] {
+  const lawsMatchedAsRoot = new Set(
+    results.filter((result) => result.isRootDocument === true).map((result) => result.lawId),
+  );
+
+  const groups = new Map<string, JPortalRankableResult[]>();
   for (const result of results) {
-    const existing = deduped.get(result.id);
-    if (!existing || (result.isRootDocument === true && existing.isRootDocument !== true)) {
-      deduped.set(result.id, result);
-    }
+    const isSection = result.isRootDocument !== true;
+    if (isSection && lawsMatchedAsRoot.has(result.lawId)) continue;
+    const key = isSection ? `${result.lawId}::${result.sectionKey}` : result.lawId;
+    const group = groups.get(key);
+    if (group) group.push(result);
+    else groups.set(key, [result]);
   }
-  return [...deduped.values()];
+
+  return [...groups.values()].map((group) => {
+    const representative = group.find((result) => result.inForce) ?? group[0]!;
+    const superseded = group.length - 1;
+    if (superseded < 1) return representative;
+    return {
+      ...representative,
+      subtitle: `${representative.subtitle} | +${superseded} superseded ${superseded === 1 ? 'version' : 'versions'}`,
+    };
+  });
 }
 
-function toSearchResult(result: RankableSearchResult): SearchResult {
+function toSearchResult(result: JPortalRankableResult): SearchResult {
   return {
     id: result.id,
     title: result.title,
@@ -82,13 +140,61 @@ function toSearchResult(result: RankableSearchResult): SearchResult {
   };
 }
 
+/**
+ * jPortal renders a law's "Nichtamtliches Inhaltsverzeichnis" as a two-column
+ * table — title, valid-from — in which every title links to the norm's own
+ * docId. That makes it the one place where the ids of all sections of a law can
+ * be read in a single request, so the entries this returns are addressable:
+ * each `id` goes straight back into `legis:get`.
+ */
+function parseTableOfContents(html: string, lawId: string): TocEntry[] {
+  const $ = cheerio.load(html);
+  const entries: TocEntry[] = [];
+
+  $('.jwsinhaltsverzeichnis table tr').each((_, row) => {
+    const cell = $(row).find('td').first();
+    if (cell.length === 0) return;
+
+    const link = cell.find('a[data-juris-link]').first().attr('data-juris-link');
+    if (!link) return;
+
+    let docId: string | undefined;
+    try {
+      const meta = JSON.parse(link) as { linkMeta?: { anchor?: string } };
+      docId = meta.linkMeta?.anchor;
+    } catch {
+      return; // A row whose link payload does not parse is not addressable.
+    }
+    // The table opens with the law itself; it is the argument, not an entry.
+    if (!docId || docId === lawId) return;
+
+    const text = normalizeSpace(cell.text());
+    if (!text) return;
+
+    const section = SECTION_TITLE.exec(text);
+    if (section) {
+      entries.push({ depth: 1, num: normalizeSpace(section[1]!), title: section[2]!.trim(), id: docId });
+      return;
+    }
+    entries.push({
+      depth: STRUCTURAL_HEADING.test(text) ? 0 : 1,
+      num: '',
+      title: text,
+      id: docId,
+    });
+  });
+
+  return entries;
+}
+
 export class JPortalAdapter implements LegisAdapter {
   readonly states = JPORTAL_STATES;
 
   async search(state: string, query: string, limit: number): Promise<SearchResult[]> {
     const expandedLimit = Math.min(MAX_SEARCH_RESULTS_TO_RERANK, Math.max(limit, limit * SEARCH_EXPANSION_FACTOR));
     const results = await jportalSearch(state, query, expandedLimit);
-    return rankSearchResults(dedupeById(results.map(toRankableResult)), query, limit).map(toSearchResult);
+    const collapsed = collapseToDistinctNorms(results.map(toRankableResult));
+    return rankSearchResults(collapsed, query, limit).map(toSearchResult);
   }
 
   async get(state: string, id: string): Promise<LegisEntry> {
@@ -107,5 +213,11 @@ export class JPortalAdapter implements LegisAdapter {
       content: metadata ? `${metadata}\n\n---\n\n${content}` : content,
       url: doc.permalink,
     };
+  }
+
+  async toc(state: string, id: string): Promise<TocEntry[]> {
+    const lawId = rootDocId(id);
+    const doc = await jportalGetDocument(state, lawId, FULL_LAW_DOC_PART);
+    return parseTableOfContents(doc.text, lawId);
   }
 }

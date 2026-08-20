@@ -21,7 +21,7 @@ const flat: LegisAdapter = {
 
 // Adapter providing its own toc().
 const tocEntries: TocEntry[] = [
-  { depth: 0, num: '§ 1', title: 'Zweck' },
+  { depth: 0, num: '§ 1', title: 'Zweck', id: 'jlr-FooNN00000000014' },
   { depth: 1, num: '', title: 'Unterpunkt' },
 ];
 const structured: LegisAdapter = {
@@ -86,6 +86,13 @@ describe('LegisProvider', () => {
     expect(structured.toc).toHaveBeenCalledWith('YY', 'x');
     expect(res.content[0].text).toContain('§ 1 Zweck');
     expect(res.content[0].text).toContain('**Unterpunkt**'); // num-less entry rendered bold
+  });
+
+  it('prints the document id of entries that carry one', async () => {
+    const res = await provider().handleToolCall('legis:toc', { id: 'x', state: 'YY' });
+    // Printed so the entry can be fetched directly; entries without an id stay bare.
+    expect(res.content[0].text).toContain('§ 1 Zweck — `jlr-FooNN00000000014`');
+    expect(res.content[0].text).not.toContain('Unterpunkt** —');
   });
 
   it('lists supported jurisdictions', async () => {

@@ -44,6 +44,74 @@ describe('JPortalAdapter', () => {
     ]);
   });
 
+  it('keeps the section docId when a law is only matched through its sections', async () => {
+    jportalSearch.mockResolvedValue([
+      {
+        docId: 'jlr-FooNN00000000353',
+        title: '§ 110 HGes',
+        subtitle: 'Landesnorm Hessen | - Mitarbeiter | Hessisches Gesetz (HGes) vom 1. Januar 2020 | gültig ab: 04.02.2026',
+        date: '2026-02-04',
+        docPart: 'S',
+      },
+    ]);
+
+    const results = await new JPortalAdapter().search('HE', '§ 110 HGes', 5);
+
+    expect(results).toHaveLength(1);
+    // The suffix is what makes the norm retrievable; stripping it to `jlr-Foo`
+    // resolves to the law's framing document instead of § 110.
+    expect(results[0]!.id).toBe('jlr-FooNN00000000353');
+    expect(results[0]!.title).toBe('§ 110 HGes');
+  });
+
+  it('collapses fassungen of one norm onto the one in force and counts the rest', async () => {
+    const fassung = (suffix: string, docPart: string, validity: string) => ({
+      docId: `jlr-FooNN000000003${suffix}`,
+      title: '§ 110 HGes',
+      subtitle: `Landesnorm Hessen | - Mitarbeiter | Hessisches Gesetz (HGes) vom 1. Januar 2020 | ${validity}`,
+      date: '2020-01-01',
+      docPart,
+    });
+    // Superseded fassungen come back first, as the portal orders them.
+    jportalSearch.mockResolvedValue([
+      fassung('52', 's', 'gültig ab: 17.07.2022 gültig bis: 03.02.2026'),
+      fassung('51', 's', 'gültig ab: 25.09.2021 gültig bis: 16.07.2022'),
+      fassung('53', 'S', 'gültig ab: 04.02.2026'),
+    ]);
+
+    const results = await new JPortalAdapter().search('HE', '§ 110 HGes', 5);
+
+    expect(results).toHaveLength(1);
+    expect(results[0]!.id).toBe('jlr-FooNN00000000353'); // docPart "S", not first
+    expect(results[0]!.subtitle).toContain('+2 superseded versions');
+  });
+
+  it('keeps distinct norms of the same law apart', async () => {
+    jportalSearch.mockResolvedValue([
+      {
+        docId: 'jlr-FooNN00000000353',
+        title: '§ 110 HGes',
+        subtitle: 'Landesnorm Hessen | - Mitarbeiter | Hessisches Gesetz (HGes) | gültig ab: 2026',
+        date: '2026-01-01',
+        docPart: 'S',
+      },
+      {
+        docId: 'jlr-FooNN00000000356',
+        title: '§ 110a HGes',
+        subtitle: 'Landesnorm Hessen | - Lektoren | Hessisches Gesetz (HGes) | gültig ab: 2026',
+        date: '2026-01-01',
+        docPart: 'S',
+      },
+    ]);
+
+    const results = await new JPortalAdapter().search('HE', 'HGes Mitarbeiter Lektoren', 5);
+
+    expect(results.map((result) => result.id).sort()).toEqual([
+      'jlr-FooNN00000000353',
+      'jlr-FooNN00000000356',
+    ]);
+  });
+
   it('prepends parsed metadata to the rendered document body', async () => {
     jportalGetDocument.mockResolvedValue({
       head: '<table><tr><th>Gültig ab:</th><td>2020</td></tr></table>',
@@ -68,5 +136,61 @@ describe('JPortalAdapter', () => {
     const entry = await new JPortalAdapter().get('RP', 'x');
     expect(entry.content).not.toContain('---');
     expect(entry.content).toContain('Body');
+  });
+
+  describe('toc', () => {
+    // Shape of the real "Nichtamtliches Inhaltsverzeichnis": a two-column table
+    // whose titles link to each norm's own docId through a JSON link payload.
+    const row = (docId: string, title: string, validFrom: string) => {
+      const link = JSON.stringify({ linkMeta: { docId: 'jlr-Foo', part: 'X', anchor: docId } })
+        .replace(/"/g, '&#34;');
+      return `<tr><td><a data-juris-gui="link" data-juris-link="${link}">${title}</a></td>`
+        + `<td><a data-juris-link="${link}">${validFrom}</a></td></tr>`;
+    };
+    const TOC_HTML =
+      '<div class="jwsinhaltsverzeichnis"><h4>Nichtamtliches Inhaltsverzeichnis</h4></div>'
+      + '<div class="jwsinhaltsverzeichnis"><table><thead><tr><th>Titel</th><th>Gültig ab</th></tr></thead>'
+      + row('jlr-Foo', 'Hessisches Gesetz (HGes) vom 1. Januar 2020', '01.01.2020')
+      + row('jlr-FooNN00000000012', 'Erster Abschnitt - Einleitende Vorschriften', '01.01.2020')
+      + row('jlr-FooNN00000000014', '§\u00a01 - Geltungsbereich', '25.09.2021')
+      + row('jlr-FooNN00000000353', '§\u00a0110 - Mitarbeiter und Mitarbeiterinnen', '04.02.2026')
+      + '</table></div>'
+      // The law's own body repeats its headings without links; those rows are
+      // not addressable and must not reach the table of contents.
+      + '<div class="docLayout"><table><tr><td>§ 110</td><td>Mitarbeiter</td></tr></table></div>';
+
+    it('reads the linked table of contents into addressable entries', async () => {
+      jportalGetDocument.mockResolvedValue({
+        head: '', text: TOC_HTML, title: 'HGes', permalink: 'https://example.test/jlr-Foo',
+      });
+
+      const entries = await new JPortalAdapter().toc('HE', 'jlr-Foo');
+
+      expect(jportalGetDocument).toHaveBeenCalledWith('HE', 'jlr-Foo', 'X');
+      expect(entries).toEqual([
+        { depth: 0, num: '', title: 'Erster Abschnitt - Einleitende Vorschriften', id: 'jlr-FooNN00000000012' },
+        { depth: 1, num: '§ 1', title: 'Geltungsbereich', id: 'jlr-FooNN00000000014' },
+        { depth: 1, num: '§ 110', title: 'Mitarbeiter und Mitarbeiterinnen', id: 'jlr-FooNN00000000353' },
+      ]);
+    });
+
+    it('reads a section id as its law, so a search hit can be expanded', async () => {
+      jportalGetDocument.mockResolvedValue({
+        head: '', text: TOC_HTML, title: 'HGes', permalink: 'https://example.test/jlr-Foo',
+      });
+
+      await new JPortalAdapter().toc('HE', 'jlr-FooNN00000000353');
+
+      expect(jportalGetDocument).toHaveBeenCalledWith('HE', 'jlr-Foo', 'X');
+    });
+
+    it('returns nothing rather than guessing when the law publishes no linked contents', async () => {
+      jportalGetDocument.mockResolvedValue({
+        head: '', text: '<div class="docLayout"><p>Kurzes Gesetz ohne Inhaltsverzeichnis.</p></div>',
+        title: 'HGes', permalink: 'u',
+      });
+
+      expect(await new JPortalAdapter().toc('HE', 'jlr-Foo')).toEqual([]);
+    });
   });
 });
