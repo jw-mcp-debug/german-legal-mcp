@@ -17,7 +17,11 @@ services:
     # request afterwards. Fine for testing; not for a client that times out fast.
     plan: free
     branch: fix/jportal-section-ids-and-toc
-    buildCommand: npm ci && npm run build
+    # --include=dev is not optional: Render sets NODE_ENV=production for Node
+    # services, and under that npm ci omits devDependencies — which is where
+    # typescript lives. Without it the build "succeeds" having compiled nothing,
+    # and the service dies at startup on a missing dist/index.js.
+    buildCommand: npm ci --include=dev && npm run build
     startCommand: node dist/index.js
     healthCheckPath: /healthz
     envVars:
