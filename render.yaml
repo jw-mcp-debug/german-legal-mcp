@@ -16,7 +16,7 @@ services:
     # Free instances spin down when idle and take ~30s to answer the first
     # request afterwards. Fine for testing; not for a client that times out fast.
     plan: free
-    branch: fix/jportal-section-ids-and-toc
+    branch: main
     # --include=dev is not optional: Render sets NODE_ENV=production for Node
     # services, and under that npm ci omits devDependencies — which is where
     # typescript lives. Without it the build "succeeds" having compiled nothing,
