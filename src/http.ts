@@ -20,7 +20,6 @@ const MAX_BODY_BYTES = 1024 * 1024;
 export interface HttpConfig {
   readonly port: number;
   readonly token: string;
-  readonly apiKeyHeader: string;
 }
 
 /**
@@ -40,7 +39,7 @@ export function readHttpConfig(env: Environment = getEnvironment()): HttpConfig 
   const token = readStringEnv('GLMCP_HTTP_TOKEN', env);
   if (!token) {
     throw new ConfigurationError([
-      'GLMCP_HTTP_TOKEN is required when GLMCP_HTTP is true — an MCP endpoint without a bearer token or API key is open to anyone who learns its URL',
+      'GLMCP_HTTP_TOKEN is required when GLMCP_HTTP is true — an MCP endpoint without a bearer token is open to anyone who learns its URL',
     ]);
   }
 
@@ -48,12 +47,7 @@ export function readHttpConfig(env: Environment = getEnvironment()): HttpConfig 
     ? readIntegerEnv('PORT', 3000, { min: 1, max: 65535 }, env)
     : readIntegerEnv('GLMCP_HTTP_PORT', 3000, { min: 1, max: 65535 }, env);
 
-  // Some clients reserve `authorization` for their own OAuth flow and will not
-  // let an operator set it as a custom header. The same token is therefore also
-  // accepted under a freely chosen name. Node lowercases incoming header names.
-  const apiKeyHeader = (readStringEnv('GLMCP_HTTP_HEADER', env) ?? 'x-api-key').toLowerCase();
-
-  return { port, token, apiKeyHeader };
+  return { port, token };
 }
 
 /** Constant-time, and length-safe: timingSafeEqual throws on a length mismatch. */
@@ -64,24 +58,12 @@ function tokenMatches(presented: string, expected: string): boolean {
   return timingSafeEqual(a, b);
 }
 
-/**
- * Two ways to present the same secret: `Authorization: Bearer <token>`, and the
- * configured API-key header carrying the bare token without a scheme prefix.
- */
-function isAuthorized(request: IncomingMessage, config: HttpConfig): boolean {
-  const bearer = request.headers.authorization;
-  if (bearer?.startsWith('Bearer ')) {
-    return tokenMatches(bearer.slice('Bearer '.length).trim(), config.token);
-  }
-
-  const presented = request.headers[config.apiKeyHeader];
-  const value = Array.isArray(presented) ? presented[0] : presented;
-  if (typeof value === 'string' && value.length > 0) {
-    return tokenMatches(value.trim(), config.token);
-  }
-
-  return false;
+function isAuthorized(request: IncomingMessage, token: string): boolean {
+  const header = request.headers.authorization;
+  if (!header?.startsWith('Bearer ')) return false;
+  return tokenMatches(header.slice('Bearer '.length).trim(), token);
 }
+
 function respond(response: ServerResponse, status: number, body: unknown): void {
   const payload = JSON.stringify(body);
   response.writeHead(status, {
@@ -154,7 +136,8 @@ export function createMcpHttpListener(
       return;
     }
 
-    if (!isAuthorized(request, config)) {
+    if (!isAuthorized(request, config.token)) {
+      response.setHeader('WWW-Authenticate', 'Bearer');
       respond(response, 401, { error: 'unauthorized' });
       return;
     }
