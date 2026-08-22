@@ -74,14 +74,22 @@ describe('HausProvider', () => {
     await provider.shutdown();
   });
 
-  it('puts the binding-force banner ahead of the document text', async () => {
+  it('answers with the banner and a map, not with the whole document', async () => {
+    // An Ordnung runs to some 12.000 tokens against a few hundred for one
+    // paragraph, so the default is an outline and the text is one flag away.
     const { provider, store } = seeded();
     const id = store.enumerate()[0]!.id;
-    const rendered = text(await provider.handleToolCall('haus:get', { id }));
-    expect(rendered.startsWith('⚠')).toBe(true);
-    expect(rendered).toContain('unverbindliche Orientierung');
-    expect(rendered).toContain('Aktualität prüfen');
-    expect(rendered).toContain('Vier Wochen');
+    const outline = text(await provider.handleToolCall('haus:get', { id }));
+    expect(outline.startsWith('⚠')).toBe(true);
+    expect(outline).toContain('unverbindliche Orientierung');
+    expect(outline).toContain('Aktualität prüfen');
+    expect(outline).toContain('Gliederung');
+    expect(outline).toContain('Fristen');
+    expect(outline).not.toContain('Vier Wochen');
+
+    const full = text(await provider.handleToolCall('haus:get', { id, full: true }));
+    expect(full).toContain('Vier Wochen');
+    expect(full.startsWith('⚠')).toBe(true);
     await provider.shutdown();
   });
 

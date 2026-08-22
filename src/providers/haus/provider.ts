@@ -3,6 +3,7 @@ import { rootLogger } from '../../shared/logger.js';
 import { renderSearchTable, formatHitCount } from '../../shared/search-format.js';
 import type { SearchFormat } from '../../shared/search-format.js';
 import { extractSection } from '../../shared/extract-section.js';
+import { renderOutline } from '../../shared/document-outline.js';
 import { saveToFile } from '../../shared/save-to-file.js';
 import { hausTools } from './tools/index.js';
 import { HausIndexStore } from './store.js';
@@ -143,8 +144,8 @@ export class HausProvider implements Provider {
   }
 
   private async handleGet(args: Record<string, unknown>): Promise<ToolResult> {
-    const { id, url, section, save_path: savePath } = args as {
-      id?: string; url?: string; section?: string; save_path?: string;
+    const { id, url, section, full = false, save_path: savePath } = args as {
+      id?: string; url?: string; section?: string; full?: boolean; save_path?: string;
     };
     if (!id && !url) {
       return {
@@ -165,13 +166,39 @@ export class HausProvider implements Provider {
     const banner = renderBanner(toReference(record), {
       staleAfterMonths: this.config.staleAfterMonths,
     });
-    const body = section ? extractSection(record.body, section) : record.body;
-    const document = `${banner}\nQuelle: ${record.url}\n\n# ${record.title}\n\n---\n\n${body}`;
+    const header = `${banner}\nQuelle: ${record.url}\n\n# ${record.title}`;
 
     if (savePath) {
-      return saveToFile(savePath, document, `${record.title}\n${record.url}`);
+      return saveToFile(
+        savePath,
+        `${header}\n\n---\n\n${record.body}`,
+        `${record.title}\n${record.url}`,
+      );
     }
-    return { content: [{ type: 'text', text: document }] };
+    if (section) {
+      return {
+        content: [{
+          type: 'text',
+          text: `${header}\n\n---\n\n${extractSection(record.body, section)}`,
+        }],
+      };
+    }
+    // An Ordnung runs to ~12.000 tokens; a single § is a few hundred. The
+    // banner still travels with the outline, so a reader learns what they are
+    // holding before they ask for any of it.
+    if (!full) {
+      return {
+        content: [{
+          type: 'text',
+          text: renderOutline(record.body, {
+            header,
+            sectionHint: '`section: "§ 15"`, `section: "Beschlussfähigkeit"`',
+            fullHint: '`full: true`',
+          }),
+        }],
+      };
+    }
+    return { content: [{ type: 'text', text: `${header}\n\n---\n\n${record.body}` }] };
   }
 
   private async handleCoverage(): Promise<ToolResult> {

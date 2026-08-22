@@ -34,14 +34,38 @@ describe('RiiProvider', () => {
     })).resolves.toMatchObject({
       content: [{ text: expect.stringContaining('case-1') }],
     });
+    // The default answer is a map of the decision, not the decision: a full
+    // BVerfG judgment measured 31.174 tokens against 390 for its outline.
     await expect(provider.handleToolCall('rii:get_decision', {
       doc_id: 'case-1',
       source: 'BUND',
+    })).resolves.toMatchObject({
+      content: [{ text: expect.stringContaining('Gliederung') }],
+    });
+    await expect(provider.handleToolCall('rii:get_decision', {
+      doc_id: 'case-1',
+      source: 'BUND',
+      full: true,
     })).resolves.toMatchObject({
       content: [{ text: expect.stringContaining('Decision text') }],
     });
     await expect(provider.handleToolCall('rii:unknown', {}))
       .resolves.toMatchObject({ isError: true });
+  });
+
+  it('extracts a section from a federal decision, not only from a Bavarian one', async () => {
+    // Section extraction ran for source "BY" alone, which left it inert on the
+    // federal decisions — the longest this server serves. Nothing in the
+    // extraction is source-specific; it reads Markdown headings.
+    const provider = new RiiProvider(http(), new RiiConverter());
+    const result = await provider.handleToolCall('rii:get_decision', {
+      doc_id: 'case-1',
+      source: 'BUND',
+      section: 'lines:1-2',
+    });
+    const rendered = result.content.map((block) => block.text).join('\n');
+    expect(rendered).not.toContain('Gliederung');
+    expect(rendered.split('\n')).toHaveLength(2);
   });
 
   it('prints the decision\'s own page so a quotation from it can be checked', async () => {

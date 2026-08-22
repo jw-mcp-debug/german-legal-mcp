@@ -483,6 +483,31 @@ documents, so an unconsolidated index can answer a question about a
 Geschäftsordnung with the text of a change list. Amendments are detected today
 but not yet linked to the rule they amend.
 
+### Token budget
+
+Retrieval is where this server spends a conversation's context, and the sources
+are long. Measured with `cl100k_base` against the live portals:
+
+| | Tokens |
+|---|---|
+| Tool definitions (all 25, sent with every request) | 6.802 |
+| Any search, 10 results | 215–1.176 |
+| `rii:get_decision` — one BVerfG judgment in full | **31.174** |
+| the same decision as an outline (the default) | **390** |
+| its Tenor, asked for by name | 18 |
+| `haus:get` — an Ordnung in full | 12.314 |
+
+On a 140.000-token budget — the ceiling of the institution's LibreChat
+instance — five full decisions leave nothing for the conversation. So the three
+heaviest retrievals (`rii:get_decision`, `oldata:get`, `haus:get`) answer with
+an **outline by default**: the document's sections, their line ranges and what
+each would cost. The full text is one `full: true` away, a named section is
+`section: "Tenor"`, and `save_path` writes it to a file instead of the
+conversation.
+
+Providers that an instance does not need can be switched off entirely with
+`GLMCP_*_ENABLED=false`, which removes their definitions from every request.
+
 ### Token-Efficient Document Retrieval
 
 Retrieval behavior is explicit and provider-specific:

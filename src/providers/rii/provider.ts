@@ -5,6 +5,7 @@ import { rootLogger } from '../../shared/logger.js';
 import { validateConversion } from '../../shared/converter.js';
 import { saveToFile } from '../../shared/save-to-file.js';
 import { extractSection } from '../../shared/extract-section.js';
+import { renderOutline } from '../../shared/document-outline.js';
 import { riiTools } from './tools/index.js';
 import {
   formatHitCount,
@@ -181,9 +182,10 @@ export class RiiProvider implements Provider {
       doc_id: string;
       save_path?: string;
     };
-    const { part = 'L', section } = args as {
+    const { part = 'L', section, full = false } = args as {
       part?: string;
       section?: string;
+      full?: boolean;
     };
     const decision = await this.client.getDecision(source, doc_id, { part });
     validateConversion(decision.content, source);
@@ -205,8 +207,37 @@ export class RiiProvider implements Provider {
         `Gericht: ${decision.court}\nDatum: ${decision.date}\nAktenzeichen: ${decision.fileNumber}`,
       );
     }
-    if (section && source === 'BY') {
+    // Section extraction used to run for source "BY" alone, which left it
+    // inert on the federal decisions — the longest this server serves, measured
+    // at ~19.700 tokens for one BVerfG judgment. Nothing in the extraction is
+    // source-specific; it reads Markdown headings, and every adapter produces
+    // them.
+    if (section) {
       return { content: [{ type: 'text', text: extractSection(markdown, section) }] };
+    }
+
+    // A full decision is the most expensive answer this server gives. Handing
+    // one over unasked can spend a seventh of a 140.000-token conversation, so
+    // the default is a map of the decision and the full text is one flag away.
+    if (!full) {
+      return {
+        content: [{
+          type: 'text',
+          text: renderOutline(decision.content, {
+            header: `# ${decision.title}\n\n**Gericht:** ${decision.court}`
+              + `\n**Datum:** ${decision.date}`
+              + `\n**Aktenzeichen:** ${decision.fileNumber}`
+              + (decision.ecli ? `\n**ECLI:** ${decision.ecli}` : '')
+              + (decision.url ? `\n**Source:** ${decision.url}` : ''),
+            omitHeading: decision.title,
+            // Gründe is most of a decision, so naming it is barely a saving.
+            // Randnummern are the lever that actually cuts one down.
+            sectionHint: '`section: "Leitsatz"`, `section: "Tenor"`, '
+              + 'oder für die Gründe eine Randnummernspanne: `section: "Rn 11-20"`',
+            fullHint: '`full: true`',
+          }),
+        }],
+      };
     }
     return { content: [{ type: 'text', text: markdown }] };
   }

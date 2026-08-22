@@ -3,6 +3,7 @@ import { rootLogger } from '../../shared/logger.js';
 import { formatHitCount, renderSearchTable } from '../../shared/search-format.js';
 import type { SearchFormat } from '../../shared/search-format.js';
 import { extractSection } from '../../shared/extract-section.js';
+import { renderOutline } from '../../shared/document-outline.js';
 import { saveToFile } from '../../shared/save-to-file.js';
 import { oldataTools } from './tools/index.js';
 import { OldataClient } from './client.js';
@@ -101,8 +102,8 @@ export class OldataProvider implements Provider {
   }
 
   private async handleGet(args: Record<string, unknown>): Promise<ToolResult> {
-    const { id, section, save_path: savePath } = args as {
-      id: string; section?: string; save_path?: string;
+    const { id, section, full = false, save_path: savePath } = args as {
+      id: string; section?: string; full?: boolean; save_path?: string;
     };
 
     const record = await this.client.getCase(id);
@@ -113,7 +114,6 @@ export class OldataProvider implements Provider {
       };
     }
 
-    const body = section ? extractSection(record.markdown, section) : record.markdown;
     const header = [
       `# ${record.court} · ${record.fileNumber}`,
       '',
@@ -124,10 +124,35 @@ export class OldataProvider implements Provider {
       record.sourceUrl ? `Original: ${record.sourceUrl}` : '',
     ].filter(Boolean).join('\n');
 
-    const rendered = `${header}\n\n---\n\n${body}`;
     if (savePath) {
-      return saveToFile(savePath, rendered, `${record.court} ${record.fileNumber}`);
+      return saveToFile(
+        savePath,
+        `${header}\n\n---\n\n${record.markdown}`,
+        `${record.court} ${record.fileNumber}`,
+      );
     }
-    return { content: [{ type: 'text', text: rendered }] };
+    if (section) {
+      return {
+        content: [{
+          type: 'text',
+          text: `${header}\n\n---\n\n${extractSection(record.markdown, section)}`,
+        }],
+      };
+    }
+    // A full judgment measured ~12.000 tokens; its Tenor, asked for by name,
+    // measured 157. The map goes out by default and the text stays one flag away.
+    if (!full) {
+      return {
+        content: [{
+          type: 'text',
+          text: renderOutline(record.markdown, {
+            header,
+            sectionHint: '`section: "Tenor"`, `section: "Gründe"`',
+            fullHint: '`full: true`',
+          }),
+        }],
+      };
+    }
+    return { content: [{ type: 'text', text: `${header}\n\n---\n\n${record.markdown}` }] };
   }
 }

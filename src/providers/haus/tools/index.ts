@@ -38,14 +38,20 @@ export const hausTools: ToolDefinition[] = [
   {
     name: 'haus:get',
     description:
-      'Retrieve one house document in full from the local index, by the id from '
-      + 'a haus:search result or by its source URL. Returns Markdown preceded by '
-      + 'the binding-force and Stand banner. Use `section` for part of a long '
-      + 'document: a heading, "lines:100-200". Use `save_path` to write it to a file.',
+      'Retrieve one house document from the local index, by the id from a '
+      + 'haus:search result or by its source URL. BY DEFAULT this returns the '
+      + 'binding-force and Stand banner plus an OUTLINE of the document — its '
+      + 'sections with line ranges and sizes — not the full text, because an '
+      + 'Ordnung measures around 12.000 tokens against a few hundred for a single '
+      + 'paragraph. Read the outline, then ask for what you need with `section` '
+      + '(a heading such as "§ 15" or "Beschlussfähigkeit", or "lines:100-200"). '
+      + 'Pass `full: true` when the whole text is required, or `save_path` to '
+      + 'write it to a file.',
     inputSchema: z.object({
       id: z.string().optional().describe('Document id from a haus:search result'),
       url: z.string().optional().describe('Source URL, as an alternative to id'),
-      section: z.string().optional().describe('Extract part: heading text or "lines:100-200"'),
+      section: z.string().optional().describe('Return only this part: heading text or "lines:100-200"'),
+      full: z.boolean().optional().default(false).describe('Return the complete document instead of the outline. Expensive — prefer `section`.'),
       save_path: z.string().optional().describe('Absolute file path for the full document.'),
     }),
   },

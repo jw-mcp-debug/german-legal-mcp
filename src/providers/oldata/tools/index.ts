@@ -30,14 +30,19 @@ export const oldataTools: ToolDefinition[] = [
   {
     name: 'oldata:get',
     description:
-      'Retrieve one decision in full by the id from an oldata:search result. '
-      + 'Returns Markdown with the court, file number, date and — where the source '
-      + 'has one — the ECLI. Use `section` for part of a long judgment: a heading '
-      + 'such as "Gründe" or "Tenor", or "lines:100-200". Use `save_path` to write '
-      + 'it to a file.',
+      'Retrieve one decision by the id from an oldata:search result. '
+      + 'BY DEFAULT this returns metadata plus an OUTLINE — the judgment\'s sections '
+      + 'with their line ranges and sizes — not the full text, because a full '
+      + 'judgment measures around 12.000 tokens against a Tenor of about 150. '
+      + 'Read the outline, then ask for what you need with `section` (a heading '
+      + 'such as "Tenor" or "Gründe", or "lines:100-200"). Pass `full: true` only '
+      + 'when the whole text is genuinely required, or `save_path` to write it to '
+      + 'a file. Returns Markdown with court, file number, date and — where the '
+      + 'source has one — the ECLI.',
     inputSchema: z.object({
       id: z.string().describe('Decision id from an oldata:search result'),
-      section: z.string().optional().describe('Extract part: "Tenor", "Gründe", or "lines:100-200"'),
+      section: z.string().optional().describe('Return only this part: "Tenor", "Gründe", or "lines:100-200"'),
+      full: z.boolean().optional().default(false).describe('Return the complete decision instead of the outline. Expensive — prefer `section`.'),
       save_path: z.string().optional().describe('Absolute file path for the full decision.'),
     }),
   },

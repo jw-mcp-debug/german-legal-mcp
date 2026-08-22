@@ -25,15 +25,23 @@ export const riiTools: ToolDefinition[] = [
   {
     name: 'rii:get_decision',
     description:
-      'Retrieve full text of a court decision by doc ID. ' +
-      'Returns decision in Markdown format with metadata (court, date, file number, ECLI). ' +
+      'Retrieve a court decision by doc ID. ' +
+      'BY DEFAULT this returns metadata plus an OUTLINE of the decision — its ' +
+      'sections with their line ranges and sizes — not the full text. Full ' +
+      'decisions are the most expensive answer this server gives (a BVerfG ' +
+      'judgment measures ~19.700 tokens), so read the outline, then request the ' +
+      'part you need with `section` (a heading such as "Tenor" or "Gründe", or ' +
+      '"lines:100-200"). Pass `full: true` only when the whole text is genuinely ' +
+      'required, or `save_path` to write it to a file instead of the conversation. ' +
+      'Returns Markdown with court, date, file number and ECLI. ' +
       'Use source "BY" for IDs from gesetze-bayern.de (format: Y-300-Z-...).',
     inputSchema: z.object({
       doc_id: z.string().describe('Document ID from search results (e.g., "jb-KORE704442026" for BUND, "Y-300-Z-GRURRS-B-2021-N-55699" for BY)'),
       part: z.enum(['K', 'L']).optional().default('L').describe('K = Kurztext (summary), L = Langtext (full text, default). Only for source "BUND".'),
       save_path: z.string().optional().describe('Absolute file path for the full document. Relative paths are not supported. Returns metadata only.'),
       source: z.enum(DECISION_SOURCES).optional().default('BUND').describe('Decision source: BUND, BY, NW, or a jPortal state code.'),
-      section: z.string().optional().describe('Section heading or "lines:100-200". Only for source "BY".'),
+      section: z.string().optional().describe('Return only this part: a heading such as "Tenor" or "Gründe", or "lines:100-200". Works for every source.'),
+      full: z.boolean().optional().default(false).describe('Return the complete decision instead of the outline. Expensive — prefer `section`.'),
     }),
   },
 ];
