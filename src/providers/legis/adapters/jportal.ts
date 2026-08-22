@@ -3,6 +3,7 @@ import TurndownService from 'turndown';
 import {
   jportalSearch,
   jportalGetDocument,
+  jportalPermalink,
   JPORTAL_STATES,
   type JPortalSearchResult,
   type JPortalDocument,
@@ -141,12 +142,14 @@ function collapseToDistinctNorms(
   });
 }
 
-function toSearchResult(result: JPortalRankableResult): SearchResult {
+function toSearchResult(result: JPortalRankableResult, state: string): SearchResult {
+  const url = jportalPermalink(state, result.id);
   return {
     id: result.id,
     title: result.title,
     subtitle: result.subtitle,
     date: result.date,
+    ...(url ? { url } : {}),
   };
 }
 
@@ -212,7 +215,7 @@ export class JPortalAdapter implements LegisAdapter {
     const expandedLimit = Math.min(MAX_SEARCH_RESULTS_TO_RERANK, Math.max(limit, limit * SEARCH_EXPANSION_FACTOR));
     const results = await jportalSearch(state, query, expandedLimit);
     const collapsed = collapseToDistinctNorms(results.map(toRankableResult));
-    return rankSearchResults(collapsed, query, limit).map(toSearchResult);
+    return rankSearchResults(collapsed, query, limit).map((r) => toSearchResult(r, state));
   }
 
   async get(state: string, id: string): Promise<LegisEntry> {

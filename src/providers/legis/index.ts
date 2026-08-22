@@ -63,6 +63,8 @@ export class LegisProvider implements Provider {
       .map((result, index) => (
         `${index + 1}. **${result.title}**\n`
         + `   - ID: \`${result.id}\`\n`
+        // Bremen carries the address as the id; repeating it helps nobody.
+        + (result.url && result.url !== result.id ? `   - ${result.url}\n` : '')
         + `   - ${result.subtitle}${result.date ? ` (${result.date})` : ''}`
       ))
       .join('\n\n');

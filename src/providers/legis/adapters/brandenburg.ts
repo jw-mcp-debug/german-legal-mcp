@@ -72,6 +72,7 @@ export class BrandenburgAdapter implements LegisAdapter {
               title,
               subtitle: '',
               date: '',
+              url: `${BASE}/${id}`,
               rankText: `${title} ${id} ${abbreviationAliases(title)}`,
               isRootDocument: href.startsWith('/gesetze/') || href.startsWith('/verordnungen/'),
             });

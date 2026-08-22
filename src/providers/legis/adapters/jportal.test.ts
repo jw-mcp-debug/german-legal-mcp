@@ -4,7 +4,10 @@ const { jportalSearch, jportalGetDocument } = vi.hoisted(() => ({
   jportalSearch: vi.fn(),
   jportalGetDocument: vi.fn(),
 }));
-vi.mock('../../../shared/clients/jportal.js', () => ({
+vi.mock('../../../shared/clients/jportal.js', async (importOriginal) => ({
+  // The real permalink formula stays in play, so the expectations below assert
+  // the address the portal actually serves rather than a copy of it.
+  ...(await importOriginal<typeof import('../../../shared/clients/jportal.js')>()),
   jportalSearch,
   jportalGetDocument,
   JPORTAL_STATES: ['HE', 'RP'],
@@ -37,6 +40,7 @@ describe('JPortalAdapter', () => {
     expect(results).toEqual([
       {
         id: 'jlr-Foo',
+        url: 'https://www.rv.hessenrecht.hessen.de/perma?d=jlr-Foo',
         title: 'HGes',
         subtitle: 'Landesnorm Hessen | Hessisches Gesetz (HGes) vom 1. Januar 2020 | gültig ab: 2020',
         date: '2020-01-01',

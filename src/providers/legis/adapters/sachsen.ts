@@ -31,7 +31,7 @@ export class SachsenAdapter implements LegisAdapter {
       if (href.includes('suche') || results.length >= limit) return;
       const id = href.replace('/vorschrift/', '');
       if (!results.some((r) => r.id === id)) {
-        results.push({ id, title: $r(el).text().trim(), subtitle: '', date: '' });
+        results.push({ id, title: $r(el).text().trim(), subtitle: '', date: '', url: `${BASE}/vorschrift/${id}` });
       }
     });
     return results;
