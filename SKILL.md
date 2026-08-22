@@ -7,8 +7,8 @@ description: "Geleitete Recherche in deutschem und EU-Recht: erst Normbezug klä
 # Ausrollen gegen die tatsächlich im Agenten sichtbaren Namen zu prüfen.
 # BEWUSST NICHT ZUGEORDNET: ris:* (österreichisches Recht — würde bei deutschen
 # Fragen falsche Normen liefern), arxiv:* (kein Rechtsinhalt), nautos:* (DIN/EN/ISO;
-# der Lizenzvertrag untersagt die KI-Erschließung, der Provider ist im BHT-Fork
-# entfernt). Diese drei dürfen dem Agenten gar nicht erst zugeordnet werden.
+# der Lizenzvertrag untersagt die KI-Erschließung). Diese drei dürfen dem Agenten
+# gar nicht erst zugeordnet werden.
 allowed-tools: ["legis:search", "legis:get", "legis:toc", "legis:states", "rii:search", "rii:get_decision", "eul:search", "eul:get_document", "icu:search", "icu:get_document", "dip:search", "dip:get", "dip:search_vorgang"]
 user-invocable: true
 ---
@@ -378,10 +378,6 @@ vermuteten unterscheiden. Danach fragen, welcher Strang weiterverfolgt werden so
 
 ## Werkzeug-Referenz
 
-Dieser Skill setzt den **BHT-Fork** des Servers voraus. Gegen die Ursprungsversion
-liefert das Inhaltsverzeichnis eines Landesgesetzes null Einträge und die Kennung
-aus der Suche führt statt zum Vorschriftentext zu einem Rahmendokument.
-
 Bundes- und Landesrecht:
 - `legis:search(query, state, limit)` — **nur Länder**, nicht `BUND`.
 - `legis:get(id, state, save_path=optional)` — BUND: `"bgb/823"`, `"gg/Art. 1"`.
@@ -405,6 +401,6 @@ Materialien (nur Bundesrecht):
 
 **Nicht verwenden:** `ris:*` liefert **österreichisches** Recht und ist bei
 deutschen Fragen eine Fehlerquelle · `arxiv:*` enthält keine Rechtsquellen ·
-`nautos:*` ist im BHT-Fork entfernt (der Lizenzvertrag untersagt die
+`nautos:*` darf nicht verwendet werden (der Lizenzvertrag untersagt die
 KI-Erschließung von DIN/EN/ISO-Normen). Diese Tools sollten dem Agenten gar nicht
 erst zugeordnet werden; die Regel hier ist nur eine weiche Absicherung.

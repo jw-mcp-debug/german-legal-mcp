@@ -33,7 +33,8 @@ export class BrandenburgDecisionAdapter implements DecisionAdapter {
     const results = $('#resultlist tbody tr').slice(0, limit).map((_, el) => {
       const cells = $(el).find('td');
       const link = cells.eq(3).find('a');
-      return { id: link.attr('href')?.split('/').pop() || '', title: link.text().replace(/\s+/g, ' ').trim(), subtitle: `${cells.eq(1).text().trim()} | ${cells.eq(4).text().replace(/\s+/g, ' ').trim()}`, date: cells.eq(2).text().trim(), court: cells.eq(4).text().replace(/\s+/g, ' ').trim() };
+      const id = link.attr('href')?.split('/').pop() || '';
+      return { id, ...(id ? { url: `${BASE}/gerichtsentscheidung/${id}` } : {}), title: link.text().replace(/\s+/g, ' ').trim(), subtitle: `${cells.eq(1).text().trim()} | ${cells.eq(4).text().replace(/\s+/g, ' ').trim()}`, date: cells.eq(2).text().trim(), court: cells.eq(4).text().replace(/\s+/g, ' ').trim() };
     }).get();
     return { results };
   }

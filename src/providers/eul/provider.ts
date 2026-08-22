@@ -6,7 +6,7 @@ import { EulConverter } from './converter.js';
 import { validateConversion } from '../../shared/converter.js';
 import { saveToFile } from '../../shared/save-to-file.js';
 import { eulTools } from './tools/index.js';
-import { EulDataClient } from './data-client.js';
+import { EulDataClient, eurLexUrl } from './data-client.js';
 
 const logger = rootLogger.child({ module: 'eul-provider' });
 
@@ -69,15 +69,20 @@ export class EulProvider implements Provider {
     const markdown = await this.client.getLegislation(celex, language);
     validateConversion(markdown, 'EUR-Lex');
 
+    // Every returned text carries its EUR-Lex address. A CELEX number is not a
+    // citation a reader can follow, and a section extract is the case where the
+    // surrounding document — and with it any link — is gone.
+    const source = `\n\n---\n**Source:** ${eurLexUrl(celex, language)}`;
+
     if (section) {
       const extracted = this.extractSection(markdown, section);
       if (!extracted) {
         return { content: [{ type: 'text', text: `Section "${section}" not found.` }], isError: true };
       }
-      return { content: [{ type: 'text', text: extracted }] };
+      return { content: [{ type: 'text', text: `${extracted}${source}` }] };
     }
 
-    const fullDoc = `# ${celex}\n\n---\n\n${markdown}`;
+    const fullDoc = `# ${celex}\n\n---\n\n${markdown}${source}`;
 
     if (save_path) {
       return saveToFile(save_path, fullDoc, `CELEX: ${celex}\nLanguage: ${language}`);

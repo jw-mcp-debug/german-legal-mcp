@@ -157,6 +157,9 @@ export class RiiProvider implements Provider {
             { header: 'ecli', value: (result) => result.ecli },
             { header: 'title', value: (result) => result.title, maxWidth: 120 },
             { header: 'docId', value: (result) => result.id },
+            // NRW and Bremen already use the address as the document id; repeating
+            // it would double the cost of every one of their rows.
+            { header: 'url', value: (result) => (result.url === result.id ? undefined : result.url) },
             ...(include_snippets
               ? [{
                 header: 'snippet',

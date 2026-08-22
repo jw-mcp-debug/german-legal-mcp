@@ -2,6 +2,8 @@ import type { DecisionAdapter, DecisionEntry, DecisionPage, DecisionSearchResult
 import { searchBayern, fetchBayernDecision } from '../bayern/client.js';
 import { convertBayernDecision } from '../bayern/converter.js';
 
+const DOCUMENT_BASE = 'https://www.gesetze-bayern.de/Content/Document';
+
 interface BayernClient { search(query: string, limit: number, page?: number): Promise<{ results: Array<{ title: string; docId: string; subtitle: string }>; totalHits?: number }>; get(id: string): Promise<string>; }
 
 /**
@@ -65,6 +67,7 @@ export class BayernDecisionAdapter implements DecisionAdapter {
         const parsed = parseBayernResult(r.title, r.subtitle);
         return {
           id: r.docId,
+          ...(r.docId ? { url: `${DOCUMENT_BASE}/${r.docId}` } : {}),
           title: parsed.title,
           subtitle: r.subtitle,
           date: parsed.date ?? '',
@@ -79,6 +82,6 @@ export class BayernDecisionAdapter implements DecisionAdapter {
   async get(_source: string, id: string): Promise<DecisionEntry> {
     const d = convertBayernDecision(await this.client.get(id));
     const content = [d.leitsaetze.length ? `## Leitsätze\n\n${d.leitsaetze.map((l, i) => `${i + 1}. ${l}`).join('\n')}` : '', d.normenketten.length ? `**Normenketten:** ${d.normenketten.join('; ')}` : '', d.fundstelle ? `**Fundstelle:** ${d.fundstelle}` : '', d.content].filter(Boolean).join('\n\n');
-    return { title: d.title || d.fileNumber, content, url: `https://www.gesetze-bayern.de/Content/Document/${id}`, court: d.court, date: d.date, fileNumber: d.fileNumber };
+    return { title: d.title || d.fileNumber, content, url: `${DOCUMENT_BASE}/${id}`, court: d.court, date: d.date, fileNumber: d.fileNumber };
   }
 }
