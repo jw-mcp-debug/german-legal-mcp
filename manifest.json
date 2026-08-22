@@ -3,7 +3,7 @@
   "name": "german-legal-mcp",
   "display_name": "German Legal MCP",
   "version": "3.2.1",
-  "description": "German, Austrian and EU legal research: legislation, case law, parliamentary materials, preprints and standards \u2014 one MCP server; public sources need no subscription credentials.",
+  "description": "German and EU legal research \u2014 legislation, case law and parliamentary materials \u2014 alongside a local index of this institution's published administrative rules.",
   "icon": "icon.png",
   "author": {
     "name": "Fabian Schmieder",

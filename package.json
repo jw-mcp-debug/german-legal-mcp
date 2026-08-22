@@ -1,7 +1,7 @@
 {
   "name": "@metaneutrons/german-legal-mcp",
   "version": "3.4.4",
-  "description": "MCP server and typed components for German, Austrian and EU legal research",
+  "description": "MCP server and typed components for German and EU legal research, plus a local index of this institution's published administrative rules",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
@@ -41,7 +41,11 @@
       "types": "./dist/providers/rii/index.d.ts",
       "import": "./dist/providers/rii/index.js"
     },
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./components/haus": {
+      "types": "./dist/providers/haus/index.d.ts",
+      "import": "./dist/providers/haus/index.js"
+    }
   },
   "bin": {
     "german-legal-mcp": "dist/index.js"
@@ -90,7 +94,9 @@
     "mcp",
     "legal",
     "german",
-    "law"
+    "law",
+    "bht",
+    "university-governance"
   ],
   "author": {
     "name": "Fabian Schmieder"

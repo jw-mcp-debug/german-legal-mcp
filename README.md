@@ -4,7 +4,7 @@
 
 # German Legal MCP Server
 
-German, Austrian &amp; EU legal research — legislation, case law, parliamentary materials, literature and standards
+German &amp; EU legal research plus this institution's own published rules — legislation, case law, parliamentary materials, house documents
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0) [![Node.js Version](https://img.shields.io/badge/node-%3E%3D25.0.0-brightgreen)](https://nodejs.org/) [![TypeScript](https://img.shields.io/badge/TypeScript-6.0-blue)](https://www.typescriptlang.org/) [![MCP](https://img.shields.io/badge/MCP-1.29-purple)](https://modelcontextprotocol.io/)
 
@@ -27,9 +27,10 @@ German, Austrian &amp; EU legal research — legislation, case law, parliamentar
 > live contracts detect availability or response-shape drift. Subscription
 > sources require valid credentials, licences or institutional access.
 
-A Model Context Protocol (MCP) server for German, Austrian and EU legal
-research, providing unified access to legislation, case law, parliamentary
-materials, literature, preprints and technical standards.
+A Model Context Protocol (MCP) server for German and EU legal research,
+providing unified access to legislation, case law and parliamentary materials —
+and, in this fork, to the Berliner Hochschule für Technik's own published
+administrative rules alongside them.
 
 The provider layer is also available as typed application components. Consumers
 do not need to run MCP or parse tool output — they can consume normalized
@@ -69,28 +70,31 @@ Shared provenance, rights, search and document types are exported from
 and a structured data client. The MCP tools use those same clients; MCP output
 is only a presentation layer over the application contract.
 
-Multi-domain databases return discriminated unions. For example, RIS exposes
-one client for Austrian case law and legislation; narrow each result through
-`resourceType` before using type-specific fields:
+Results are discriminated unions; narrow on `resourceType` before using
+type-specific fields. House documents carry two fields no legal portal has —
+how much weight the rule carries, and whether this rendering of it is the
+promulgated one:
 
 ```ts
-import { component as ris } from '@metaneutrons/german-legal-mcp/components/ris';
+import { component as haus } from '@metaneutrons/german-legal-mcp/components/haus';
 
-const client = ris.createDataClient();
-const results = await client.search({ query: 'Datenschutz' });
+const client = haus.createDataClient();
+const results = await client.search({ query: 'Wahlordnung Fristen' });
 for (const result of results.results) {
-  if (result.resourceType === 'case-law') console.log(result.fileNumber);
-  if (result.resourceType === 'legislation') console.log(result.eli);
+  if (result.resourceType !== 'administrative-guidance') continue;
+  console.log(result.normativeForce);            // 'binding' | 'guidance' | …
+  console.log(result.authority);                 // 'official' | 'reading-version'
+  console.log(result.asOf, result.owner);        // Stand, and who maintains it
 }
 ```
 
-Optional portable capabilities cover tables of contents, authentication and
-operational status. RIS exposes native legislation TOCs. The German legislation
-client reports a native TOC where the source supplies one and derives it from
-the document otherwise. RII is case-law-only and does not advertise a TOC
-capability.
-Nautos implements TOC and authentication lifecycle capabilities while keeping
-its session details behind the provider boundary.
+Optional portable capabilities cover tables of contents, corpus enumeration,
+authentication and operational status. The German legislation client reports a
+native TOC where the source supplies one and derives it from the document
+otherwise. RII is case-law-only and does not advertise a TOC capability. The
+house client implements corpus enumeration natively, because its `since` bound
+is a predicate on an indexed column rather than a filter applied after the
+fact.
 
 ## Supported Sources
 
