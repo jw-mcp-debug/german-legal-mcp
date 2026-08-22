@@ -110,6 +110,7 @@ function toSearchResult(result: RankableSearchResult): SearchResult {
     title: result.title,
     subtitle: result.subtitle,
     date: result.date,
+    ...(result.url ? { url: result.url } : {}),
   };
 }
 
@@ -152,6 +153,7 @@ export class NRWAdapter implements LegisAdapter {
       const fullQuotation = s.field_full_quotation_processed?.[0] || '';
       return {
         id: nid,
+        ...(s.url?.[0] ? { url: `${BASE}${s.url[0]}` } : {}),
         title: longTitle || shortTitle,
         subtitle: shortTitle,
         date: s.field_document_type_name?.[0] || '',

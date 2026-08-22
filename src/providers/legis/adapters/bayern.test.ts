@@ -21,7 +21,7 @@ describe('BayernAdapter', () => {
     const results = await new BayernAdapter().search('BY', 'bauordnung', 10);
 
     expect(results).toEqual([
-      { id: 'BayBO', title: 'Bayerische Bauordnung', subtitle: '', date: '' },
+      { id: 'BayBO', title: 'Bayerische Bauordnung', subtitle: '', date: '', url: 'https://www.gesetze-bayern.de/Content/Document/BayBO' },
     ]);
   });
 

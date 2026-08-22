@@ -37,7 +37,7 @@ export class BayernAdapter implements LegisAdapter {
       const href = $r(el).attr('href')!;
       const id = href.replace('/Content/Document/', '').replace('/true', '');
       if (skip.has(id) || results.length >= limit || results.some((r) => r.id === id)) return;
-      results.push({ id, title: $r(el).text().trim(), subtitle: '', date: '' });
+      results.push({ id, title: $r(el).text().trim(), subtitle: '', date: '', url: `${BASE}/Content/Document/${id}` });
     });
     return results;
   }

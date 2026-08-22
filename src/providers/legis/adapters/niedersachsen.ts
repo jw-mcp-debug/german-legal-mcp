@@ -28,6 +28,7 @@ export class NiedersachsenAdapter implements LegisAdapter {
       const id = href.split('/').pop() || '';
       results.push({
         id,
+        url: `${BASE}/browse/document/${id}`,
         title: $(el).text().trim(),
         subtitle: $(el).closest('.egal-search-result-item-title')
           .next('.egal-search-result-item-snippet').text().trim(),

@@ -21,7 +21,7 @@ describe('SachsenAdapter', () => {
     const results = await new SachsenAdapter().search('SN', 'bauordnung', 10);
 
     expect(results).toEqual([
-      { id: 'SaechsBO', title: 'Sächsische Bauordnung', subtitle: '', date: '' },
+      { id: 'SaechsBO', title: 'Sächsische Bauordnung', subtitle: '', date: '', url: 'https://www.revosax.sachsen.de/vorschrift/SaechsBO' },
     ]);
     // The CSRF token and cookie were forwarded to the search POST.
     const [, body, cfg] = mockAxios.post.mock.calls[0];
