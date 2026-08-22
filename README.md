@@ -130,6 +130,21 @@ gives the Stand as the Beschlussdatum rather than the upload date, which differ
 by weeks to months; *Licence* gives a real SPDX identifier (CC BY-NC-ND 4.0)
 where a plain web crawl would have to record `NOASSERTION`.
 
+**Finding the reading versions.** Nothing on the website lists them — the page
+that looks like an index links promulgated PDFs instead. `sitemap.xml` does list
+them, along with all 1.272 German pages, so discovery is one request plus a
+polite pass over the candidates rather than a crawl:
+
+```bash
+npm run build && node scripts/haus-discover.mjs --out lesefassungen.md
+```
+
+It honours `robots.txt`, keeps pages that carry three or more `§` headings, and
+produces a review sheet rather than ingesting — the responsible office and the
+authoritative counterpart are not on these pages and have to be supplied by a
+person. Note that the sitemap's `lastmod` is unusable as a change signal: `/589`
+reports 2015-10-28 for a page stating "in der Fassung vom 16.07.2026".
+
 **Access, as measured.** OAI-PMH (`/oai`) and the OPUS export module both answer
 `401`, there is no REST API, and the RSS feed caps at 25 items. The Solr result
 pages do page cleanly (`rows/100/start/N`) to all 118 records, so ingest goes

@@ -64,7 +64,12 @@ export function parseReadingVersion(html: string, url: string): BhtWebPage {
     .get();
   const sectionCount = headings.filter((heading) => heading.startsWith('§')).length;
 
-  const title = headings[0] ?? $('h1').first().text().replace(/\s+/g, ' ').trim();
+  // Skip § headings when looking for the title. Some pages open the content
+  // area with the rule itself and carry their name only in the page `h1` — the
+  // Benutzungsordnung does, and taking the first heading regardless titled it
+  // "§ 1 - Geltungsbereich", which names a provision rather than the Ordnung.
+  const title = headings.find((heading) => !heading.startsWith('§'))
+    ?? $('h1').first().text().replace(/\s+/g, ' ').trim();
   const plain = container.text().replace(/\s+/g, ' ');
   const fassung = /in der Fassung vom\s*([\d.]+)/i.exec(plain);
   const asOf = fassung?.[1] ? toIsoDate(fassung[1]) : undefined;

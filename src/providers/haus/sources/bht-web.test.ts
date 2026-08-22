@@ -36,6 +36,15 @@ describe('parseReadingVersion', () => {
       .toBe(false);
   });
 
+  it('takes the title from the page heading when the content opens with § 1', () => {
+    // The Benutzungsordnung has no title heading inside the content area; its
+    // name lives in the page h1. Taking headings[0] regardless yielded
+    // "§ 1 - Geltungsbereich" — a provision, not the Ordnung.
+    const page = parseReadingVersion(fixture('bht-web-benutzungsordnung.html'), BENUTZUNG_URL);
+    expect(page.title).toBe('Benutzungsordnung');
+    expect(page.title.startsWith('§')).toBe(false);
+  });
+
   it('handles a page that carries no Fassung line and a different § style', () => {
     const page = parseReadingVersion(fixture('bht-web-benutzungsordnung.html'), BENUTZUNG_URL);
     expect(page.sectionCount).toBeGreaterThan(5);

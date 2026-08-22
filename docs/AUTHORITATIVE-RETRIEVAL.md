@@ -98,10 +98,17 @@ a safe conclusion.
 
 ## 7. Ingest gaps
 
-- **[ ] Discovery crawl for reading versions.** There is no index of them on the
-  website; `/ordnungen` links promulgated PDFs, not consolidated pages. They must
-  be found by crawling — candidate heuristic: a page whose `.frame-type-text`
-  content carries three or more `§` headings.
+- **[x] Discovery for reading versions.** No crawl was needed: `sitemap.xml`
+  lists all 1.272 German pages and contains every known reading version, so one
+  request replaces a breadth-first walk. `scripts/haus-discover.mjs` walks it,
+  honours `robots.txt`, and keeps pages carrying three or more `§` headings.
+  It reports for review rather than ingesting, because `owner` and
+  `authoritativeSource` are not on these pages.
+- **[ ] Change detection for web pages.** The sitemap's `lastmod` cannot serve:
+  TYPO3 dates the page record, not its content. `/589` reports `2015-10-28`
+  while the page states "in der Fassung vom 16.07.2026". Re-fetch and compare
+  the content hash the index already stores; `lastmod` is recorded only so the
+  discrepancy stays visible.
 - **[ ] PDF full text from OPUS.** Frontdoor metadata is parsed; the linked PDFs
   are not yet converted, so gazette records currently index without their text.
 - **[ ] OAI-PMH once opened.** Gives real deltas via `from=` and deleted-record
