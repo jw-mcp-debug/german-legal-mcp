@@ -45,6 +45,10 @@
     "./components/haus": {
       "types": "./dist/providers/haus/index.d.ts",
       "import": "./dist/providers/haus/index.js"
+    },
+    "./components/vwv": {
+      "types": "./dist/providers/vwv/index.d.ts",
+      "import": "./dist/providers/vwv/index.js"
     }
   },
   "bin": {

@@ -52,6 +52,7 @@ describe('provider manifest', () => {
       'icu',
       'legis',
       'rii',
+      'vwv',
     ]);
     expect(getProviderManifest('private').map((entry) => entry.id)).toEqual(['haus']);
   });

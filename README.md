@@ -105,6 +105,7 @@ fact.
 | [InfoCuria (CJEU)](https://infocuria.curia.europa.eu) | ✅ Available | `icu:` | None (public) |
 | [EUR-Lex](https://eur-lex.europa.eu) | ✅ Available | `eul:` | None (public) |
 | [DIP Bundestag](https://dip.bundestag.de) | ✅ Available | `dip:` | Public key included |
+| [Verwaltungsvorschriften des Bundes](https://www.verwaltungsvorschriften-im-internet.de) | ✅ Available | `vwv:` | None (public) |
 | BHT house documents (local index) | 🚧 In development | `haus:` | None (local SQLite index) |
 
 ### BHT sources behind `haus:`
@@ -354,6 +355,7 @@ or add your MCP client config (e.g., `claude_desktop_config.json`):
 | `GLMCP_HTTP_PORT` | `3000` | HTTP listen port, used when the platform sets no `PORT`. |
 | `GLMCP_LEGIS_ENABLED` | `true` | Bundes- & Landesrecht |
 | `GLMCP_RII_ENABLED` | `true` | Rechtsprechung im Internet |
+| `GLMCP_VWV_ENABLED` | `true` | Verwaltungsvorschriften des Bundes |
 | `GLMCP_ICU_ENABLED` | `true` | InfoCuria (CJEU) |
 | `GLMCP_EUL_ENABLED` | `true` | EUR-Lex |
 | `GLMCP_DIP_ENABLED` | `true` | DIP Bundestag (auto-disabled after 2027-06-01 without own key) |
@@ -402,6 +404,21 @@ or add your MCP client config (e.g., `claude_desktop_config.json`):
 | `dip:get` | Retrieve full text of a Drucksache by Dokumentnummer (e.g., "19/27426"). Supports `section` and `save_path`. |
 | `dip:search_vorgang` | Search legislative processes (Vorgänge) with status and linked Drucksachen. |
 | `dip:search_plenarprotokoll` | Full text search across parliamentary debate transcripts (BT and BR). |
+
+### Verwaltungsvorschriften des Bundes (`vwv:*` tools)
+
+| Tool | Description |
+|------|-------------|
+| `vwv:search` | Search the federal ministries' administrative regulations, by full text or by title. |
+| `vwv:get` | Retrieve a regulation by document id; names the parent regulation where the document is an annex. |
+| `vwv:issuers` | List the ministries covered, with the number of regulations each has. |
+
+Administrative regulations bind the administration rather than citizens, and
+carry the operational detail statutes leave open — notably the
+Nebenbestimmungen governing public grants (ANBest-P, ANBest-I, BNBest), which
+decide how third-party funding may be spent and accounted for. The portal
+offers no API and its search returns document ids without titles, so titles are
+supplied from a per-ministry listing index built once and cached for 30 days.
 
 ### House documents (`haus:*` tools)
 
@@ -508,7 +525,7 @@ This repo uses [Conventional Commits](https://www.conventionalcommits.org/) enfo
 
 **Types:** `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `chore`, `ci`, `build`, `revert`
 
-**Scopes:** `legis`, `rii`, `icu`, `eul`, `dip`, `haus`, `core`, `deps`, `config`
+**Scopes:** `legis`, `rii`, `icu`, `eul`, `dip`, `vwv`, `haus`, `core`, `deps`, `config`
 
 ## Architecture
 
@@ -522,7 +539,7 @@ This repo uses [Conventional Commits](https://www.conventionalcommits.org/) enfo
 - **Structured JSON errors** — all providers return `BaseError.toJSON()` with `code`, `userMessage`, `recoveryHint`; Axios errors auto-wrapped; DNS failures fail fast
 - **Conversion validation** — all HTML→Markdown providers validate output is non-empty; detects upstream layout changes early
 
-- Tools namespaced by source (`legis:`, `rii:`, `icu:`, `eul:`, `dip:`, `haus:`)
+- Tools namespaced by source (`legis:`, `rii:`, `icu:`, `eul:`, `dip:`, `vwv:`, `haus:`)
 
 ## License
 

@@ -109,6 +109,18 @@
     {
       "name": "rii:get_decision",
       "description": "Retrieve the full text of a court decision by document ID."
+    },
+    {
+      "name": "vwv:search",
+      "description": "Search the administrative regulations of the German federal ministries."
+    },
+    {
+      "name": "vwv:get",
+      "description": "Retrieve a federal administrative regulation by document id, with its parent regulation."
+    },
+    {
+      "name": "vwv:issuers",
+      "description": "List the ministries covered, with the number of regulations each has."
     }
   ],
   "user_config": {
