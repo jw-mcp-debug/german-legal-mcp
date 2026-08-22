@@ -19,7 +19,7 @@
  * Pacing is serial with a delay between requests; robots.txt is fetched and
  * honoured, and the User-Agent says who is calling and why.
  */
-import { writeFileSync } from 'node:fs';
+import { appendFileSync, writeFileSync } from 'node:fs';
 import {
   discoverReadingVersions,
   parseRobots,
@@ -74,6 +74,17 @@ const report = await discoverReadingVersions({
       return await get(url);
     } catch {
       return null;
+    }
+  },
+  // Checkpoint as we go: a forty-minute sweep must not lose everything to an
+  // interruption near the end.
+  onResult: (result) => {
+    if (!outPath) return;
+    if (result.kind === 'candidate') {
+      appendFileSync(`${outPath}.jsonl`, `${JSON.stringify(result.candidate)}\n`);
+    } else if (result.reason === 'fetch-failed') {
+      appendFileSync(`${outPath}.jsonl`,
+        `${JSON.stringify({ url: result.url, reason: result.reason })}\n`);
     }
   },
   onProgress: (visited, total, url) => {

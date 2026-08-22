@@ -182,6 +182,27 @@ describe('discoverReadingVersions', () => {
     expect(report.rejected).toEqual([{ url: GO_AS, reason: 'fetch-failed' }]);
   });
 
+  it('names the unreachable pages instead of only counting them', async () => {
+    const report = await discoverReadingVersions({ entries, fetchPage });
+    expect(renderDiscoveryReport(report)).toContain('https://www.bht-berlin.de/kaputt');
+  });
+
+  it('streams each result so a long run can checkpoint', async () => {
+    const seen: string[] = [];
+    await discoverReadingVersions({
+      entries,
+      fetchPage,
+      robots: parseRobots(ROBOTS),
+      onResult: (result) => {
+        seen.push(`${result.kind === 'candidate' ? 'ok' : result.reason}:${result.url}`);
+      },
+    });
+    expect(seen).toContain(`ok:${GO_AS}`);
+    expect(seen).toContain('fetch-failed:https://www.bht-berlin.de/kaputt');
+    expect(seen).toContain('robots-disallowed:https://www.bht-berlin.de/typo3/');
+    expect(seen).toHaveLength(entries.length);
+  });
+
   it('reports progress for every page it visits', async () => {
     const seen: string[] = [];
     await discoverReadingVersions({

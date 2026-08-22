@@ -119,8 +119,13 @@ a safe conclusion.
   removed by frequency across pages, provision headings promoted only where the
   text after the § is capitalised and short — so an amendment's quoted
   provisions stay prose instead of posing as its own sections.
-- **[ ] Incremental output from long discovery runs.** The report is written
-  once at the end, so a run interrupted at page 1.200 loses everything.
+- **[x] Incremental output from long discovery runs.** Results stream to a
+  `.jsonl` checkpoint as they land, and unreachable pages are named in the
+  report rather than only counted.
+- **[ ] Re-check the pages a sweep could not fetch.** The first full run over
+  1.272 pages found 4 reading versions — the four already known — and failed to
+  fetch 56 (4,4 %). Those are unaccounted for and could hide a rule. The report
+  now names them, so a targeted second pass is cheap; it has not been run.
 - **[ ] OAI-PMH once opened.** Gives real deltas via `from=` and deleted-record
   semantics. Only the fetch layer changes; the mapping is already written.
 - **[ ] Re-crawl and staleness loop.** `haus:stale` reports age. Nothing yet

@@ -84,6 +84,19 @@ export interface DiscoveryOptions {
    */
   readonly minSections?: number;
   readonly onProgress?: (visited: number, total: number, url: string) => void;
+  /**
+   * Called as each result lands, so a caller can persist progress.
+   *
+   * A sweep of this site takes roughly forty minutes. Writing the report only
+   * at the end means an interruption at page 1.200 loses all of it — the
+   * difference between a long job and a fragile one.
+   */
+  readonly onResult?: (
+    result: { readonly url: string } & (
+      | { readonly kind: 'candidate'; readonly candidate: ReadingVersionCandidate }
+      | { readonly kind: 'rejected'; readonly reason: RejectionReason }
+    ),
+  ) => void;
 }
 
 const DEFAULT_MIN_SECTIONS = 3;
@@ -186,15 +199,21 @@ export async function discoverReadingVersions(
     robots = { disallow: [] },
     minSections = DEFAULT_MIN_SECTIONS,
     onProgress,
+    onResult,
   } = options;
 
   const candidates: ReadingVersionCandidate[] = [];
   const rejected: DiscoveryRejection[] = [];
   let visited = 0;
 
+  const reject = (url: string, reason: RejectionReason): void => {
+    rejected.push({ url, reason });
+    onResult?.({ url, kind: 'rejected', reason });
+  };
+
   for (const entry of entries) {
     if (!isAllowed(entry.url, robots)) {
-      rejected.push({ url: entry.url, reason: 'robots-disallowed' });
+      reject(entry.url, 'robots-disallowed');
       continue;
     }
 
@@ -208,16 +227,18 @@ export async function discoverReadingVersions(
       html = null;
     }
     if (html === null) {
-      rejected.push({ url: entry.url, reason: 'fetch-failed' });
+      reject(entry.url, 'fetch-failed');
       continue;
     }
 
     const result = classifyPage(html, entry.url, minSections);
     if (typeof result === 'string') {
-      rejected.push({ url: entry.url, reason: result });
+      reject(entry.url, result);
       continue;
     }
-    candidates.push({ ...result, ...(entry.lastmod ? { lastmod: entry.lastmod } : {}) });
+    const candidate = { ...result, ...(entry.lastmod ? { lastmod: entry.lastmod } : {}) };
+    candidates.push(candidate);
+    onResult?.({ url: entry.url, kind: 'candidate', candidate });
   }
 
   candidates.sort((a, b) =>
@@ -229,6 +250,7 @@ export async function discoverReadingVersions(
 
 /** A review sheet: what to ingest, and what a person still has to supply. */
 export function renderDiscoveryReport(report: DiscoveryReport): string {
+  const unreachable = report.rejected.filter((r) => r.reason === 'fetch-failed');
   const counts = new Map<RejectionReason, number>();
   for (const { reason } of report.rejected) {
     counts.set(reason, (counts.get(reason) ?? 0) + 1);
@@ -249,6 +271,14 @@ export function renderDiscoveryReport(report: DiscoveryReport): string {
     'Nicht übernommen: '
     + ([...counts].map(([reason, n]) => `${reason} ${n}`).join(', ') || 'nichts'),
     '',
+    // Named, not merely counted. A page that could not be fetched may be a rule
+    // the sweep missed, and a bare count leaves nothing to re-check.
+    ...(unreachable.length === 0 ? [] : [
+      `## Nicht erreichbar (${unreachable.length}) — erneut prüfen`,
+      '',
+      ...unreachable.map((rejection) => `- ${rejection.url}`),
+      '',
+    ]),
     '> Vor dem Einlesen zu ergänzen, weil die Seiten es nicht sagen:',
     '> zuständiges Referat (`owner`) und die amtliche Fundstelle',
     '> (`authoritativeSource`) je Eintrag. Ein "nein" in der vierten Spalte',
