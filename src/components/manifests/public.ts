@@ -15,6 +15,7 @@ export const PUBLIC_PROVIDER_MANIFEST: readonly ProviderComponentReference[] = [
   publicComponent('eul', () => import('../../providers/eul/index.js')),
   publicComponent('icu', () => import('../../providers/icu/index.js')),
   publicComponent('legis', () => import('../../providers/legis/index.js')),
+  publicComponent('oldata', () => import('../../providers/oldata/index.js')),
   publicComponent('rii', () => import('../../providers/rii/index.js')),
   publicComponent('vwv', () => import('../../providers/vwv/index.js')),
 ] as const;

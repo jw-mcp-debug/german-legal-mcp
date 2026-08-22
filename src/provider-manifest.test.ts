@@ -51,6 +51,7 @@ describe('provider manifest', () => {
       'eul',
       'icu',
       'legis',
+      'oldata',
       'rii',
       'vwv',
     ]);

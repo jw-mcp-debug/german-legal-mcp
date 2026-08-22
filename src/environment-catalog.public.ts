@@ -11,6 +11,7 @@ export const PUBLIC_ENVIRONMENT_VARIABLES: readonly EnvironmentVariable[] = [
   { name: 'GLMCP_EUL_ENABLED', description: 'Enable the EUR-Lex provider.', defaultValue: 'true' },
   { name: 'GLMCP_ICU_ENABLED', description: 'Enable the InfoCuria provider.', defaultValue: 'true' },
   { name: 'GLMCP_LEGIS_ENABLED', description: 'Enable the legislation provider.', defaultValue: 'true' },
+  { name: 'GLMCP_OLDATA_ENABLED', description: 'Enable the Open Legal Data provider.', defaultValue: 'true' },
   { name: 'GLMCP_RII_ENABLED', description: 'Enable the RII provider.', defaultValue: 'true' },
   { name: 'GLMCP_VWV_ENABLED', description: 'Enable the federal administrative-regulations provider.', defaultValue: 'true' },
 ] as const;

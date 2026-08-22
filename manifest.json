@@ -121,6 +121,14 @@
     {
       "name": "vwv:issuers",
       "description": "List the ministries covered, with the number of regulations each has."
+    },
+    {
+      "name": "oldata:search",
+      "description": "Full-text search across German court decisions including the instances (Open Legal Data)."
+    },
+    {
+      "name": "oldata:get",
+      "description": "Retrieve one court decision in full by its Open Legal Data id."
     }
   ],
   "user_config": {

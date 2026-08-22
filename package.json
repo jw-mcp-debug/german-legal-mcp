@@ -49,6 +49,10 @@
     "./components/vwv": {
       "types": "./dist/providers/vwv/index.d.ts",
       "import": "./dist/providers/vwv/index.js"
+    },
+    "./components/oldata": {
+      "types": "./dist/providers/oldata/index.d.ts",
+      "import": "./dist/providers/oldata/index.js"
     }
   },
   "bin": {

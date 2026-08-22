@@ -102,6 +102,7 @@ fact.
 |--------|--------|--------|----------------|
 | Bundes- & Landesrecht | ✅ Available | `legis:` | None (public) |
 | [Rechtsprechung im Internet](https://www.rechtsprechung-im-internet.de) | ✅ Available | `rii:` | None (public) |
+| [Open Legal Data](https://de.openlegaldata.io) | ✅ Available | `oldata:` | None (public API) |
 | [InfoCuria (CJEU)](https://infocuria.curia.europa.eu) | ✅ Available | `icu:` | None (public) |
 | [EUR-Lex](https://eur-lex.europa.eu) | ✅ Available | `eul:` | None (public) |
 | [DIP Bundestag](https://dip.bundestag.de) | ✅ Available | `dip:` | Public key included |
@@ -355,6 +356,7 @@ or add your MCP client config (e.g., `claude_desktop_config.json`):
 | `GLMCP_HTTP_PORT` | `3000` | HTTP listen port, used when the platform sets no `PORT`. |
 | `GLMCP_LEGIS_ENABLED` | `true` | Bundes- & Landesrecht |
 | `GLMCP_RII_ENABLED` | `true` | Rechtsprechung im Internet |
+| `GLMCP_OLDATA_ENABLED` | `true` | Open Legal Data (Instanzrechtsprechung) |
 | `GLMCP_VWV_ENABLED` | `true` | Verwaltungsvorschriften des Bundes |
 | `GLMCP_ICU_ENABLED` | `true` | InfoCuria (CJEU) |
 | `GLMCP_EUL_ENABLED` | `true` | EUR-Lex |
@@ -404,6 +406,27 @@ or add your MCP client config (e.g., `claude_desktop_config.json`):
 | `dip:get` | Retrieve full text of a Drucksache by Dokumentnummer (e.g., "19/27426"). Supports `section` and `save_path`. |
 | `dip:search_vorgang` | Search legislative processes (Vorgänge) with status and linked Drucksachen. |
 | `dip:search_plenarprotokoll` | Full text search across parliamentary debate transcripts (BT and BR). |
+
+### Open Legal Data (`oldata:*` tools)
+
+| Tool | Description |
+|------|-------------|
+| `oldata:search` | Full-text search across ~424.000 German court decisions, filterable by branch of the court system or by court. |
+| `oldata:get` | Retrieve one decision in full, with court, file number, date and ECLI where the source has one. |
+
+Its value beside `rii:` is reach. `rii:` carries the federal courts and selected
+Land portals; this corpus also holds first- and second-instance decisions —
+Arbeitsgerichte and Landesarbeitsgerichte, Verwaltungs- and Sozialgerichte —
+where much of employment, social and administrative law is actually decided and
+which are otherwise largely unpublished. Use `rii:` for leading federal case
+law and this for what the instances did.
+
+Two properties of the source shape the output. Its result count stops at 10.000,
+so a broad query is reported as a floor rather than a total. And its
+jurisdiction filter is unreliable — some values return nothing although
+decisions carry them — so an empty filtered result is re-checked unfiltered
+before it is reported, rather than passing an API quirk off as a finding about
+the law.
 
 ### Verwaltungsvorschriften des Bundes (`vwv:*` tools)
 
@@ -525,7 +548,7 @@ This repo uses [Conventional Commits](https://www.conventionalcommits.org/) enfo
 
 **Types:** `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `chore`, `ci`, `build`, `revert`
 
-**Scopes:** `legis`, `rii`, `icu`, `eul`, `dip`, `vwv`, `haus`, `core`, `deps`, `config`
+**Scopes:** `legis`, `rii`, `oldata`, `icu`, `eul`, `dip`, `vwv`, `haus`, `core`, `deps`, `config`
 
 ## Architecture
 
@@ -539,7 +562,7 @@ This repo uses [Conventional Commits](https://www.conventionalcommits.org/) enfo
 - **Structured JSON errors** — all providers return `BaseError.toJSON()` with `code`, `userMessage`, `recoveryHint`; Axios errors auto-wrapped; DNS failures fail fast
 - **Conversion validation** — all HTML→Markdown providers validate output is non-empty; detects upstream layout changes early
 
-- Tools namespaced by source (`legis:`, `rii:`, `icu:`, `eul:`, `dip:`, `vwv:`, `haus:`)
+- Tools namespaced by source (`legis:`, `rii:`, `oldata:`, `icu:`, `eul:`, `dip:`, `vwv:`, `haus:`)
 
 ## License
 
