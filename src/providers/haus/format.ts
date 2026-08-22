@@ -69,5 +69,14 @@ export function renderBanner(
   }
 
   if (reference.owner) parts.push(reference.owner);
-  return `⚠ ${parts.join(' · ')}`;
+
+  const banner = `⚠ ${parts.join(' · ')}`;
+  if (reference.authority === 'official') return banner;
+
+  // A consolidated web rendering is usable and not authoritative, and a reader
+  // who is about to rely on it needs both halves of that in the same breath.
+  const pointer = reference.authoritativeSource
+    ? ` Amtlich: ${reference.authoritativeSource}.`
+    : '';
+  return `${banner}\n  ↳ nichtamtliche Lesefassung — im Zweifel gilt der amtliche Text.${pointer}`;
 }

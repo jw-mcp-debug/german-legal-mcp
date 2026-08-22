@@ -11,6 +11,7 @@ function reference(
     normativeForce: 'guidance',
     status: 'in-force',
     confidentiality: 'public',
+    authority: 'official',
     documentType: 'Handreichung',
     asOf: '2024-03-01',
     owner: 'Justiziariat',
@@ -82,6 +83,32 @@ describe('renderBanner', () => {
       .toContain('verbindlich');
     expect(renderBanner(reference({ normativeForce: 'record' }), { now: NOW }))
       .toContain('regelt nicht');
+  });
+});
+
+describe('renderBanner for a reading version', () => {
+  it('says the text is not the authoritative one, and where that is', () => {
+    const banner = renderBanner(
+      reference({
+        authority: 'reading-version',
+        authoritativeSource: 'Amtliche Mitteilungen 47/01',
+      }),
+      { now: NOW },
+    );
+    expect(banner).toContain('nichtamtliche Lesefassung');
+    expect(banner).toContain('im Zweifel gilt der amtliche Text');
+    expect(banner).toContain('Amtliche Mitteilungen 47/01');
+  });
+
+  it('still warns when no authoritative counterpart is recorded', () => {
+    const banner = renderBanner(reference({ authority: 'reading-version' }), { now: NOW });
+    expect(banner).toContain('nichtamtliche Lesefassung');
+    expect(banner).not.toContain('Amtlich:');
+  });
+
+  it('leaves a promulgated document without the caveat', () => {
+    expect(renderBanner(reference({ authority: 'official' }), { now: NOW }))
+      .not.toContain('Lesefassung');
   });
 });
 

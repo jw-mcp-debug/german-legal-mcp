@@ -14,6 +14,7 @@ function record(overrides: Partial<HausDocumentRecord> = {}): HausDocumentRecord
     normativeForce: 'guidance',
     status: 'in-force',
     confidentiality: 'public',
+    authority: 'official',
     asOf: '2024-03-01',
     owner: 'Justiziariat',
     language: 'de',

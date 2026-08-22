@@ -177,6 +177,9 @@ export function toIngestInput(
     body,
     normativeForce: record.normativeForce,
     confidentiality: 'public',
+    // Promulgated in the gazette: this *is* the authoritative text, which is
+    // exactly what a consolidated reading version on the website is not.
+    authority: record.normativeForce === 'binding' ? 'official' : 'reading-version',
     status: 'in-force',
     documentType,
     licence: record.licence,

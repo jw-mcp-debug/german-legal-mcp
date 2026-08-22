@@ -4,6 +4,7 @@ import { dirname } from 'node:path';
 import { createHash } from 'node:crypto';
 import type {
   Confidentiality,
+  DocumentAuthority,
   DocumentStatus,
   NormativeForce,
 } from '../../contracts/legal-resource.js';
@@ -23,6 +24,8 @@ export interface HausDocumentRecord {
   readonly normativeForce: NormativeForce;
   readonly status: DocumentStatus;
   readonly confidentiality: Confidentiality;
+  readonly authority: DocumentAuthority;
+  readonly authoritativeSource?: string;
   readonly asOf?: string;
   readonly owner?: string;
   readonly supersededBy?: string;
@@ -104,6 +107,8 @@ CREATE TABLE IF NOT EXISTS documents (
   normative_force TEXT NOT NULL,
   status         TEXT NOT NULL,
   confidentiality TEXT NOT NULL,
+  authority      TEXT NOT NULL DEFAULT 'reading-version',
+  authoritative_source TEXT,
   as_of          TEXT,
   owner          TEXT,
   superseded_by  TEXT,
@@ -166,21 +171,28 @@ export class HausIndexStore {
       this.db.exec(`ALTER TABLE documents ADD COLUMN source_id TEXT NOT NULL DEFAULT 'web'`);
       this.db.exec('CREATE INDEX IF NOT EXISTS documents_source ON documents(source_id)');
     }
+    if (!columns.includes('authority')) {
+      this.db.exec(`ALTER TABLE documents ADD COLUMN authority TEXT NOT NULL DEFAULT 'reading-version'`);
+      this.db.exec('ALTER TABLE documents ADD COLUMN authoritative_source TEXT');
+    }
   }
 
   upsert(record: HausDocumentRecord): void {
     this.db.prepare(`
       INSERT INTO documents (
         id, source_id, url, title, document_type, normative_force, status,
-        confidentiality, as_of, owner, superseded_by, language, licence,
-        redistribution, content_hash, retrieved_at, body
-      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        confidentiality, authority, authoritative_source, as_of, owner,
+        superseded_by, language, licence, redistribution, content_hash,
+        retrieved_at, body
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       ON CONFLICT(id) DO UPDATE SET
         source_id = excluded.source_id,
         url = excluded.url, title = excluded.title,
         document_type = excluded.document_type,
         normative_force = excluded.normative_force,
         status = excluded.status, confidentiality = excluded.confidentiality,
+        authority = excluded.authority,
+        authoritative_source = excluded.authoritative_source,
         as_of = excluded.as_of, owner = excluded.owner,
         superseded_by = excluded.superseded_by, language = excluded.language,
         licence = excluded.licence, redistribution = excluded.redistribution,
@@ -189,6 +201,7 @@ export class HausIndexStore {
     `).run(
       record.id, record.sourceId, record.url, record.title, record.documentType ?? null,
       record.normativeForce, record.status, record.confidentiality,
+      record.authority, record.authoritativeSource ?? null,
       record.asOf ?? null, record.owner ?? null, record.supersededBy ?? null,
       record.language ?? null, record.licence, record.redistribution,
       record.contentHash, record.retrievedAt, record.body,
@@ -313,6 +326,7 @@ function toRecord(row: Record<string, unknown>): HausDocumentRecord {
   const asOf = optional(row.as_of);
   const owner = optional(row.owner);
   const supersededBy = optional(row.superseded_by);
+  const authoritativeSource = optional(row.authoritative_source);
   const language = optional(row.language);
   return {
     id: String(row.id),
@@ -322,6 +336,7 @@ function toRecord(row: Record<string, unknown>): HausDocumentRecord {
     normativeForce: String(row.normative_force) as NormativeForce,
     status: String(row.status) as DocumentStatus,
     confidentiality: String(row.confidentiality) as Confidentiality,
+    authority: String(row.authority) as DocumentAuthority,
     licence: String(row.licence),
     redistribution: String(row.redistribution),
     contentHash: String(row.content_hash),
@@ -331,6 +346,7 @@ function toRecord(row: Record<string, unknown>): HausDocumentRecord {
     ...(asOf ? { asOf } : {}),
     ...(owner ? { owner } : {}),
     ...(supersededBy ? { supersededBy } : {}),
+    ...(authoritativeSource ? { authoritativeSource } : {}),
     ...(language ? { language } : {}),
   };
 }

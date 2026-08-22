@@ -1,5 +1,6 @@
 import type {
   Confidentiality,
+  DocumentAuthority,
   DocumentStatus,
   NormativeForce,
 } from '../../contracts/legal-resource.js';
@@ -35,6 +36,13 @@ export interface HausIngestInput {
   readonly body: string;
   readonly normativeForce: NormativeForce;
   readonly confidentiality: Confidentiality;
+  /**
+   * Defaults to `reading-version`. A web page is never the promulgation — the
+   * gazette is — so the safe default is the one that understates the text's
+   * standing rather than the one that overstates it.
+   */
+  readonly authority?: DocumentAuthority;
+  readonly authoritativeSource?: string;
   readonly status?: DocumentStatus;
   readonly documentType?: string;
   readonly asOf?: string;
@@ -88,6 +96,7 @@ export function ingestDocument(
     normativeForce: input.normativeForce,
     status: input.status ?? 'in-force',
     confidentiality: input.confidentiality,
+    authority: input.authority ?? 'reading-version',
     licence: input.licence ?? DEFAULT_RIGHTS.licence,
     redistribution: input.redistribution ?? DEFAULT_RIGHTS.redistribution,
     contentHash: hash,
@@ -96,6 +105,7 @@ export function ingestDocument(
     ...(input.asOf ? { asOf: input.asOf } : {}),
     ...(input.owner ? { owner: input.owner } : {}),
     ...(input.supersededBy ? { supersededBy: input.supersededBy } : {}),
+    ...(input.authoritativeSource ? { authoritativeSource: input.authoritativeSource } : {}),
     ...(input.language ? { language: input.language } : { language: 'de' }),
   };
   store.upsert(record);

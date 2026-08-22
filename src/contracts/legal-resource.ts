@@ -172,6 +172,23 @@ export type DocumentStatus =
 export type Confidentiality = 'public' | 'internal' | 'restricted';
 
 /**
+ * Whether this rendering is the promulgated one.
+ *
+ * The same rule routinely exists twice: promulgated in the gazette, and again
+ * as a consolidated reading version on a web page. The reading version is the
+ * one a person can actually use — the gazette publishes amendments separately
+ * and never consolidates — while the gazette is the one that governs if the
+ * two disagree.
+ *
+ * Modelled apart from `normativeForce` because the two answer different
+ * questions. A consolidated Geschäftsordnung is fully binding as a rule
+ * (`normativeForce: 'binding'`) and simultaneously not authoritative as a text
+ * (`authority: 'reading-version'`). Collapsing them would force a choice
+ * between overstating the page and understating the rule.
+ */
+export type DocumentAuthority = 'official' | 'reading-version';
+
+/**
  * A document that explains or governs house practice, rather than stating law.
  *
  * The distinction matters at the point of use: these sources answer "how do we
@@ -184,6 +201,13 @@ export interface AdministrativeGuidanceReference extends LegalResourceReference 
   readonly normativeForce: NormativeForce;
   readonly status: DocumentStatus;
   readonly confidentiality: Confidentiality;
+  readonly authority: DocumentAuthority;
+  /**
+   * Where the promulgated text of this rule can be found, for a reading
+   * version. Carrying it is what lets a consumer answer "and where does that
+   * officially say so" without a second search.
+   */
+  readonly authoritativeSource?: string;
   /** "Stand", as the document states it — not when it was fetched. */
   readonly asOf?: string;
   /** The office that maintains it, and therefore the address for a correction. */

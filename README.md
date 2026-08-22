@@ -438,9 +438,13 @@ law is* — its documents are Handreichungen, FAQs, Merkblätter, Prozess­besch
 and published Beschlüsse, and every result states its binding force and Stand.
 It reads a local SQLite (FTS5) index built by a separate ingest step; nothing is
 fetched at query time and nothing leaves the machine. Each record carries the
-corpus it came from — `opus4-bht` for documents promulgated in the institution's
-official gazette (Amtliche Mitteilungen) on its OPUS 4 publication server, which
-are binding house law, versus advisory material gathered from public web pages. Confidential and personal
+corpus it came from and whether it is the promulgated text. The same rule
+routinely exists twice: promulgated in the official gazette (Amtliche
+Mitteilungen, harvested from the institution's OPUS 4 server, unconsolidated —
+amendments are published as separate documents), and again as a consolidated
+reading version on a web page, which is what a person can actually read but is
+explicitly *nichtamtlich*. Both are indexed, both are marked, and a reading
+version always carries a pointer back to the text that governs. Confidential and personal
 material is refused at ingest rather than filtered at query time, so it is never
 written to the index at all.
 

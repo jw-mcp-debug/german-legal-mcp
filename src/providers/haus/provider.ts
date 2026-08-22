@@ -121,6 +121,7 @@ export class HausProvider implements Provider {
         { header: 'Typ', value: (row) => row.documentType },
         { header: 'Verbindlichkeit', value: (row) => row.normativeForce },
         { header: 'Status', value: (row) => row.status },
+        { header: 'Fassung', value: (row) => (row.authority === 'official' ? 'amtlich' : 'Lesefassung') },
         { header: 'Stand', value: (row) => row.asOf },
         { header: 'Zuständig', value: (row) => row.owner },
         { header: 'Fundstelle', value: (row) => row.snippet, maxWidth: 120 },

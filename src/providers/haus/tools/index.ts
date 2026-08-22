@@ -17,9 +17,10 @@ export const hausTools: ToolDefinition[] = [
       + 'Matching is lexical (BM25) and unstemmed, so German compounds and '
       + 'inflections do not match each other — search "Lizenzvertrag" AND '
       + '"Lizenzverträge" if the first returns little. Superseded and expired '
-      + 'documents are excluded unless include_outdated is set. Every hit '
-      + 'carries a banner stating its binding force and Stand; report both when '
-      + 'you use it.',
+      + 'documents are excluded unless include_outdated is set. Results state '
+      + 'whether each hit is the promulgated text ("amtlich") or a consolidated '
+      + 'reading version ("Lesefassung"); a reading version is usable but the '
+      + 'gazette governs if the two disagree, and saying so is part of using it.',
     inputSchema: z.object({
       query: z.string().describe('Search terms, e.g. "Lizenzvertrag Kündigung" or "§ 60d UrhG"'),
       document_type: z.string().optional().describe('Restrict to one type, e.g. "Handreichung", "FAQ", "Merkblatt"'),

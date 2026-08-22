@@ -19,6 +19,7 @@ export function toReference(record: HausDocumentRecord): AdministrativeGuidanceR
     normativeForce: record.normativeForce,
     status: record.status,
     confidentiality: record.confidentiality,
+    authority: record.authority,
     provenance: {
       providerId: 'haus',
       sourceId: record.sourceId,
@@ -37,6 +38,7 @@ export function toReference(record: HausDocumentRecord): AdministrativeGuidanceR
     ...(record.owner ? { owner: record.owner } : {}),
     ...(record.documentType ? { documentType: record.documentType } : {}),
     ...(record.supersededBy ? { supersededBy: record.supersededBy } : {}),
+    ...(record.authoritativeSource ? { authoritativeSource: record.authoritativeSource } : {}),
   };
 }
 
