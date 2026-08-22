@@ -65,7 +65,13 @@ the kind of citation this provider exists to keep honest.
 
 ## 4. Citations into higher-ranking law
 
-**[ ] Extract statutory references and resolve them through `legis:`.**
+**[x] Extract statutory references and resolve them through `legis:`.**
+`haus:legal_basis` reads a rule's citations and groups them by where each has
+to be resolved: statutes and regulations through `legis:`, other house rules
+through this index, unattributed ones inside the document itself. What counts
+as internal is whatever an indexed document announces as its own abbreviation,
+so the classification corrects itself as the corpus grows — `BHT-GO` moved from
+external to internal the moment the Grundordnung was indexed.
 
 The Ordnungen cite the Berlin higher-education act constantly and precisely —
 `§ 61 Abs. 2 Nr. 7 BerlHG`, `§ 48 Abs. 5 Satz 2 BerlHG`. Extracting those and
@@ -109,8 +115,12 @@ a safe conclusion.
   while the page states "in der Fassung vom 16.07.2026". Re-fetch and compare
   the content hash the index already stores; `lastmod` is recorded only so the
   discrepancy stays visible.
-- **[ ] PDF full text from OPUS.** Frontdoor metadata is parsed; the linked PDFs
-  are not yet converted, so gazette records currently index without their text.
+- **[x] PDF full text from OPUS.** Extracted with `unpdf`, running masthead
+  removed by frequency across pages, provision headings promoted only where the
+  text after the § is capitalised and short — so an amendment's quoted
+  provisions stay prose instead of posing as its own sections.
+- **[ ] Incremental output from long discovery runs.** The report is written
+  once at the end, so a run interrupted at page 1.200 loses everything.
 - **[ ] OAI-PMH once opened.** Gives real deltas via `from=` and deleted-record
   semantics. Only the fetch layer changes; the mapping is already written.
 - **[ ] Re-crawl and staleness loop.** `haus:stale` reports age. Nothing yet

@@ -268,6 +268,12 @@ export class HausIndexStore {
     return Number(this.db.prepare(sql).get()?.n ?? 0);
   }
 
+  /** Every indexed title, for reading off the abbreviations the corpus claims. */
+  titles(): string[] {
+    return this.db.prepare(`SELECT title FROM documents WHERE status = 'in-force'`)
+      .all().map((row) => String(row.title));
+  }
+
   /** What the corpus actually holds — so "no hits" can be told apart from "not covered". */
   coverage(): HausCoverageRow[] {
     const rows = this.db.prepare(`

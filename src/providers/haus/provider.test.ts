@@ -31,10 +31,12 @@ function text(result: { content: Array<{ text: string }> }): string {
 }
 
 describe('HausProvider', () => {
-  it('exposes exactly the four haus tools', () => {
+  it('exposes exactly the five haus tools', () => {
     const names = new HausProvider(CONFIG, new HausIndexStore(':memory:'))
       .getTools().map((tool) => tool.name);
-    expect(names).toEqual(['haus:search', 'haus:get', 'haus:coverage', 'haus:stale']);
+    expect(names).toEqual([
+      'haus:search', 'haus:get', 'haus:coverage', 'haus:legal_basis', 'haus:stale',
+    ]);
   });
 
   it('rejects an unknown tool', async () => {
@@ -122,6 +124,37 @@ describe('HausProvider', () => {
 
     const none = text(await provider.handleToolCall('haus:stale', { max_age_months: 1200 }));
     expect(none).toContain('Kein gültiges Dokument');
+    await provider.shutdown();
+  });
+
+  it('groups a rule\'s citations by where each has to be resolved', async () => {
+    const store = new HausIndexStore(':memory:');
+    ingestDocument(store, {
+      sourceId: 'opus4-bht',
+      url: 'https://example.test/wahlo',
+      title: 'Wahlordnung der BHT (BHT-WahlO)',
+      body: 'Gemäß § 61 Abs. 2 Nr. 7 BerlHG und § 9 BHT-WahlO sowie nach § 2 Abs. 1 gilt.',
+      normativeForce: 'binding',
+      confidentiality: 'public',
+      authority: 'official',
+    });
+    const provider = new HausProvider(CONFIG, store);
+    const id = store.enumerate()[0]!.id;
+    const rendered = text(await provider.handleToolCall('haus:legal_basis', { id }));
+
+    expect(rendered).toContain('§ 61 Abs. 2 Nr. 7 BerlHG');
+    expect(rendered).toContain('legis:');
+    // The document announces (BHT-WahlO) itself, so a citation to it resolves
+    // inside the corpus rather than being sent to the legislation provider.
+    expect(rendered).toContain('Andere Hausvorschriften');
+    expect(rendered).toContain('§ 9 BHT-WahlO');
+    await provider.shutdown();
+  });
+
+  it('reports a legal_basis request for a document it does not hold', async () => {
+    const { provider } = seeded();
+    const result = await provider.handleToolCall('haus:legal_basis', { id: 'weg' });
+    expect(result.isError).toBe(true);
     await provider.shutdown();
   });
 

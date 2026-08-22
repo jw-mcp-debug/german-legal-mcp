@@ -404,6 +404,7 @@ or add your MCP client config (e.g., `claude_desktop_config.json`):
 | `haus:search` | BM25 full-text search over the local index of this institution's published administrative documents. Filter by `source`, type, office or binding force; excludes superseded and expired documents by default. |
 | `haus:get` | Retrieve one document by id or source URL, preceded by a binding-force and Stand banner. |
 | `haus:coverage` | Report what the index contains, per document type and responsible office. |
+| `haus:legal_basis` | List the statutory and internal references a rule makes, grouped by where each is resolved — `legis:` for statutes, this index for other house rules. |
 | `haus:stale` | List valid documents whose stated Stand is older than the cut-off, or that state none. |
 
 The `haus:` provider answers *how this institution proceeds*, never *what the

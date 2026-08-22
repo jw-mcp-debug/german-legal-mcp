@@ -11,6 +11,7 @@ import { HausDataClient, toReference } from './data-client.js';
 import { renderBanner, SCOPE_CAVEAT } from './format.js';
 import type { HausConfig } from './config.js';
 import type { NormativeForce } from '../../contracts/legal-resource.js';
+import { abbreviationOf, extractCitations, groupCitations } from './citations.js';
 
 const logger = rootLogger.child({ module: 'haus-provider' });
 
@@ -49,6 +50,7 @@ export class HausProvider implements Provider {
     if (toolName === 'haus:search') return this.handleSearch(args);
     if (toolName === 'haus:get') return this.handleGet(args);
     if (toolName === 'haus:coverage') return this.handleCoverage();
+    if (toolName === 'haus:legal_basis') return this.handleLegalBasis(args);
     if (toolName === 'haus:stale') return this.handleStale(args);
     return { content: [{ type: 'text', text: `Unknown tool: ${toolName}` }], isError: true };
   }
@@ -184,6 +186,39 @@ export class HausProvider implements Provider {
         text: `Hausindex: ${store.count()} gültige Dokumente\n\n${lines.join('\n')}\n\n${SCOPE_CAVEAT}`,
       }],
     };
+  }
+
+  private async handleLegalBasis(args: Record<string, unknown>): Promise<ToolResult> {
+    const { id } = args as { id: string };
+    const store = this.requireStore();
+    const record = store.get(id);
+    if (!record) {
+      return { content: [{ type: 'text', text: `Nicht im Hausindex: ${id}` }], isError: true };
+    }
+
+    // What counts as "internal" is whatever the corpus announces about itself,
+    // so this set grows with the index instead of being maintained by hand.
+    const known = new Set(
+      store.titles().map(abbreviationOf).filter((a): a is string => a !== undefined),
+    );
+    const { external, internal, self } = groupCitations(
+      extractCitations(record.body, known),
+    );
+
+    const lines = [`# Rechtsgrundlagen: ${record.title}`, ''];
+    lines.push(external.length === 0
+      ? 'Keine Verweise auf Gesetze oder Verordnungen gefunden.'
+      : `## Gesetze und Verordnungen (${external.length}) — mit legis: auflösen\n`
+        + external.map((c) => `- ${c.raw}`).join('\n'));
+    if (internal.length > 0) {
+      lines.push('', `## Andere Hausvorschriften (${internal.length}) — mit haus:search auflösen\n`
+        + internal.map((c) => `- ${c.raw}`).join('\n'));
+    }
+    if (self.length > 0) {
+      lines.push('', `## Verweise ohne Quellenangabe (${self.length}) — beziehen sich auf dieses Dokument selbst\n`
+        + self.slice(0, 15).map((c) => `- ${c.raw}`).join('\n'));
+    }
+    return { content: [{ type: 'text', text: lines.join('\n') }] };
   }
 
   private async handleStale(args: Record<string, unknown>): Promise<ToolResult> {

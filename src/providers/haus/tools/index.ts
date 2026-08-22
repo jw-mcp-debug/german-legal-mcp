@@ -60,6 +60,20 @@ export const hausTools: ToolDefinition[] = [
     inputSchema: z.object({}),
   },
   {
+    name: 'haus:legal_basis',
+    description:
+      'List the statutory and internal references a house rule makes — the '
+      + 'authority it was issued under. Groups them: "external" citations name a '
+      + 'statute or regulation and are resolved with legis:search / legis:get; '
+      + '"internal" ones name another indexed house rule and are resolved with '
+      + 'haus:search; "self" ones point inside the document itself. Use this '
+      + 'before answering "on what legal basis" — it turns a house rule into a '
+      + 'citation you can follow rather than an assertion.',
+    inputSchema: z.object({
+      id: z.string().describe('Document id from a haus:search result'),
+    }),
+  },
+  {
     name: 'haus:stale',
     description:
       'List indexed documents whose stated Stand is older than the cut-off, or '
