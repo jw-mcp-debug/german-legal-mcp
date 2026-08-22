@@ -1,6 +1,6 @@
 import * as cheerio from 'cheerio';
 import TurndownService from 'turndown';
-import { jportalDecisionSearch, jportalGetDocument, JPORTAL_STATES, type JPortalDecisionPage, type JPortalSearchResult } from '../../../shared/clients/jportal.js';
+import { jportalDecisionSearch, jportalGetDocument, jportalPermalink, JPORTAL_STATES, type JPortalDecisionPage, type JPortalSearchResult } from '../../../shared/clients/jportal.js';
 import type { DecisionAdapter, DecisionEntry, DecisionPage, DecisionSearchResult } from '../types.js';
 
 interface DecisionClient {
@@ -10,9 +10,11 @@ interface DecisionClient {
 
 const turndown = new TurndownService({ headingStyle: 'atx' });
 
-function result(r: JPortalSearchResult): DecisionSearchResult {
+function result(r: JPortalSearchResult, source: string): DecisionSearchResult {
+  const url = jportalPermalink(source, r.docId);
   return {
     id: r.docId,
+    ...(url ? { url } : {}),
     title: r.title,
     subtitle: r.subtitle,
     date: r.date,
@@ -46,7 +48,7 @@ export class JPortalDecisionAdapter implements DecisionAdapter {
     // The R3 API takes a 1-based absolute offset, not a page number.
     const fetched = await this.client.search(source, query, limit, (page - 1) * limit + 1);
     return {
-      results: fetched.results.map(result),
+      results: fetched.results.map((r) => result(r, source)),
       ...(fetched.totalHits === undefined ? {} : { totalHits: fetched.totalHits }),
     };
   }

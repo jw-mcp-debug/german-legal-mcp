@@ -117,8 +117,10 @@ export class NiedersachsenDecisionAdapter implements DecisionAdapter {
       // The labelled facet date is authoritative where present; the heading's
       // own date is the fallback for items that omit the facet.
       const date = extra.match(/Entscheidungsdatum:\s*([\d.]+)/)?.[1] || heading.date || '';
+      const id = $(el).attr('href')?.split('/').pop() || '';
       return {
-        id: $(el).attr('href')?.split('/').pop() || '',
+        id,
+        ...(id ? { url: `${BASE}/browse/document/${id}` } : {}),
         title: heading.title,
         subtitle: item.find('.egal-search-result-item-snippet').text().replace(/\s+/g, ' ').trim(),
         date,

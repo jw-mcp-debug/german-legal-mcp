@@ -51,6 +51,17 @@ const PORTALS: Record<string, JPortalConfig> = {
 
 export const JPORTAL_STATES = Object.keys(PORTALS);
 
+/**
+ * The portal's own canonical link for a document, in the form its `permalink`
+ * field uses. A search hit carries only a docId, so without this the result
+ * list is the one place a reader cannot get back to the source from.
+ */
+export function jportalPermalink(state: string, docId: string): string | undefined {
+  const config = PORTALS[state];
+  if (!config || !docId) return undefined;
+  return `https://${config.domain}/perma?d=${docId}`;
+}
+
 const sessions = new Map<string, JPortalSession>();
 
 function baseUrl(domain: string): string {

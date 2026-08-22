@@ -198,6 +198,11 @@ SELECT DISTINCT ?celex ?title ?date WHERE {
   }
 }
 
+/** EUR-Lex's public address for a CELEX document, in one place. */
+export function eurLexUrl(celex: string, language: string): string {
+  return `https://eur-lex.europa.eu/legal-content/${language.toUpperCase()}/TXT/?uri=CELEX:${celex}`;
+}
+
 function toReference(result: EulSearchResult): LegislationReference {
   return {
     resourceType: 'legislation',
@@ -210,7 +215,7 @@ function toReference(result: EulSearchResult): LegislationReference {
       providerId: 'eul',
       sourceId: 'eul:cellar',
       providerDocumentId: result.celex,
-      canonicalUrl: `https://eur-lex.europa.eu/legal-content/${result.language.toUpperCase()}/TXT/?uri=CELEX:${result.celex}`,
+      canonicalUrl: eurLexUrl(result.celex, result.language),
     },
     rights: RIGHTS,
   };

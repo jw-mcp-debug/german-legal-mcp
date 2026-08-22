@@ -67,7 +67,7 @@ describe('RiiProvider', () => {
     const provider = new RiiProvider(http(), new RiiConverter(), adapters);
     const search = await provider.handleToolCall('rii:search', { query: 'VwVfG', source: 'ALL', limit: 10 });
     const text = (search.content[0] as { text: string }).text;
-    const rows = text.split('\n').slice(text.split('\n').indexOf('src\tdate\tcourt\taz\tecli\ttitle\tdocId') + 1);
+    const rows = text.split('\n').slice(text.split('\n').indexOf('src\tdate\tcourt\taz\tecli\ttitle\tdocId\turl') + 1);
 
     // SH returns the same court+fileNumber as BUND and must be deduplicated away.
     expect(rows).toHaveLength(2);
@@ -138,7 +138,7 @@ describe('RiiProvider', () => {
     });
     const text = (result.content[0] as { text: string }).text;
     const sources = text.split('\n')
-      .slice(text.split('\n').indexOf('src\tdate\tcourt\taz\tecli\ttitle\tdocId') + 1)
+      .slice(text.split('\n').indexOf('src\tdate\tcourt\taz\tecli\ttitle\tdocId\turl') + 1)
       .map((row) => row.split('\t')[0]);
 
     expect(sources).toHaveLength(9);
@@ -172,7 +172,7 @@ describe('RiiProvider', () => {
       .handleToolCall('rii:search', { query: 'Landesarbeitsgericht Kündigung', source: 'ALL', limit: 2 })
       .then((r) => (r.content[0] as { text: string }).text);
     const rows = text.split('\n');
-    const header = rows.indexOf('src\tdate\tcourt\taz\tecli\ttitle\tdocId');
+    const header = rows.indexOf('src\tdate\tcourt\taz\tecli\ttitle\tdocId\turl');
 
     // Two of two terms match the labour hit against one of two for the civil
     // one, so it must rank first — despite being the older of the pair, which
