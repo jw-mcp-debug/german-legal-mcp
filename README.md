@@ -145,6 +145,12 @@ authoritative counterpart are not on these pages and have to be supplied by a
 person. Note that the sitemap's `lastmod` is unusable as a change signal: `/589`
 reports 2015-10-28 for a page stating "in der Fassung vom 16.07.2026".
 
+**Proposing the links nobody wrote down.** Neither source states which gazette
+record a reading version consolidates, nor which base rule an amendment changes
+when the two name it differently. `node scripts/haus-propose-links.mjs` scores
+the candidates and writes a review sheet; it applies nothing, because a wrong
+correspondence is a fabricated citation.
+
 **Access, as measured.** OAI-PMH (`/oai`) and the OPUS export module both answer
 `401`, there is no REST API, and the RSS feed caps at 25 items. The Solr result
 pages do page cleanly (`rows/100/start/N`) to all 118 records, so ingest goes

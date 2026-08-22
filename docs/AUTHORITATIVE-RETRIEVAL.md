@@ -76,10 +76,17 @@ Neither OPUS nor the website states which gazette issue a given reading version
 consolidates. Without it the banner warns that the official text governs but
 cannot say where it is.
 
-Proposed: match reading-version titles against gazette records by normalised
-title plus decision date, emit the correspondence as a reviewable list, and have
-a person confirm it once. Auto-matching without review would fabricate exactly
-the kind of citation this provider exists to keep honest.
+`scripts/haus-propose-links.mjs` produces that list. Scoring is inverse document
+frequency over title words — "der Berliner Hochschule für Technik" ends nearly
+every title and must not drive a match, while "Senats" or "Geodäsie" decides
+one — with two gates that keep a best-match scorer from always returning
+something: the word identifying the shorter title must be among the shared ones,
+and at least one shared word must appear in no more than 30 % of titles.
+Confidence is `clear` only when the match also clears the runner-up by a margin,
+because dozens of Prüfungsordnungen differ by a single programme.
+
+Nothing is applied. The sheet has a confirmation column, and the runner-up score
+beside each row so a reviewer sees how close the field was.
 
 ## 4. Citations into higher-ranking law
 
