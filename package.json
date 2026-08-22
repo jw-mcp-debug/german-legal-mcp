@@ -21,10 +21,6 @@
       "types": "./dist/components/legislation/index.d.ts",
       "import": "./dist/components/legislation/index.js"
     },
-    "./components/arxiv": {
-      "types": "./dist/providers/arxiv/index.d.ts",
-      "import": "./dist/providers/arxiv/index.js"
-    },
     "./components/dip": {
       "types": "./dist/providers/dip/index.d.ts",
       "import": "./dist/providers/dip/index.js"
@@ -44,14 +40,6 @@
     "./components/rii": {
       "types": "./dist/providers/rii/index.d.ts",
       "import": "./dist/providers/rii/index.js"
-    },
-    "./components/ris": {
-      "types": "./dist/providers/ris/index.d.ts",
-      "import": "./dist/providers/ris/index.js"
-    },
-    "./components/nautos": {
-      "types": "./dist/providers/nautos/index.d.ts",
-      "import": "./dist/providers/nautos/index.js"
     },
     "./package.json": "./package.json"
   },

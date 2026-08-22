@@ -47,15 +47,13 @@ describe('provider manifest', () => {
   it('filters by distribution without mutating the manifest', () => {
     expect(getProviderManifest()).toBe(PROVIDER_MANIFEST);
     expect(getProviderManifest('public').map((entry) => entry.id)).toEqual([
-      'arxiv',
       'dip',
       'eul',
       'icu',
       'legis',
       'rii',
-      'ris',
-      'nautos',
     ]);
+    expect(getProviderManifest('private').map((entry) => entry.id)).toEqual(['haus']);
   });
 
   it('lazy-loads all public provider modules', async () => {

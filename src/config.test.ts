@@ -45,11 +45,11 @@ describe('configuration environment parsing', () => {
   it('redacts catalogued secrets', () => {
     expect(redactEnvironment({
       GLMCP_DIP_API_KEY: 'k-123',
-      GLMCP_NAUTOS_PASSWORD: 'secret',
+      GLMCP_HTTP_TOKEN: 'secret',
       GLMCP_LOG_LEVEL: 'info',
     })).toEqual({
       GLMCP_DIP_API_KEY: '[REDACTED]',
-      GLMCP_NAUTOS_PASSWORD: '[REDACTED]',
+      GLMCP_HTTP_TOKEN: '[REDACTED]',
       GLMCP_LOG_LEVEL: 'info',
     });
   });

@@ -98,16 +98,42 @@ its session details behind the provider boundary.
 |--------|--------|--------|----------------|
 | Bundes- & Landesrecht | ✅ Available | `legis:` | None (public) |
 | [Rechtsprechung im Internet](https://www.rechtsprechung-im-internet.de) | ✅ Available | `rii:` | None (public) |
-| [RIS Österreich](https://www.ris.bka.gv.at) | ✅ Available | `ris:` | None (public OGD API) |
 | [InfoCuria (CJEU)](https://infocuria.curia.europa.eu) | ✅ Available | `icu:` | None (public) |
 | [EUR-Lex](https://eur-lex.europa.eu) | ✅ Available | `eul:` | None (public) |
 | [DIP Bundestag](https://dip.bundestag.de) | ✅ Available | `dip:` | Public key included |
-| [arXiv](https://arxiv.org) | ✅ Available | `arxiv:` | None (public) |
-| [nautos.de](https://nautos.de) | ✅ Available | `nautos:` | Required (IP or credentials) |
-| House documents (local index) | 🚧 In development | `haus:` | None (local SQLite index) |
+| BHT house documents (local index) | 🚧 In development | `haus:` | None (local SQLite index) |
+
+### BHT sources behind `haus:`
+
+This fork is cut for the Berliner Hochschule für Technik and indexes the
+institution's own published documents. Two corpora feed one index, and which
+one a hit comes from decides how much weight it carries.
+
+| Corpus | `sourceId` | What it holds | Standing |
+|---|---|---|---|
+| [OPUS 4 publication server](https://opus4.kobv.de/opus4-bht/) — *Amtliche Mitteilungen* | `opus4-bht` | Grundordnung, Geschäfts- and Wahlordnungen, Zugangs- and Prüfungsordnungen, Richtlinien; 118 records under doctype `other` | **Promulgated text.** Governs. Not consolidated — amendments are separate documents |
+| [www.bht-berlin.de](https://www.bht-berlin.de/ordnungen) reading versions | `bht-web` | Consolidated §-by-§ renderings of individual Ordnungen, e.g. the [Geschäftsordnung des Akademischen Senats](https://www.bht-berlin.de/589) | **Reading version.** Usable, explicitly *nichtamtlich*; the gazette governs on conflict |
+
+Every result states which it is. A reading version additionally carries a
+pointer to the promulgated text where that mapping is known.
+
+**How the OPUS metadata is used.** The frontdoor pages declare the fields this
+provider needs, so almost nothing is inferred: the *Series* gives the document
+type and is the sole basis for binding force — a document carries "Amtliche
+Mitteilungen" because the Gremienreferat promulgated it there, and that act is
+what binds; *Contributor(s)* gives the responsible Referat; *Decision date*
+gives the Stand as the Beschlussdatum rather than the upload date, which differ
+by weeks to months; *Licence* gives a real SPDX identifier (CC BY-NC-ND 4.0)
+where a plain web crawl would have to record `NOASSERTION`.
+
+**Access, as measured.** OAI-PMH (`/oai`) and the OPUS export module both answer
+`401`, there is no REST API, and the RSS feed caps at 25 items. The Solr result
+pages do page cleanly (`rows/100/start/N`) to all 118 records, so ingest goes
+over HTML for now. If OAI-PMH is opened, only the fetch layer changes — the
+metadata mapping is unaffected, and incremental harvesting via `from=` becomes
+available.
 
 ## Features
-
 
 ### Bundes- & Landesrecht (`legis:*` tools)
 
@@ -138,20 +164,6 @@ its session details behind the provider boundary.
 - **Randnummern** — formatted as `[Rn. 5]{.rn}` (pandoc spans)
 - **Save to file** — `save_path` parameter to avoid context pollution
 
-### RIS Österreich (`ris:*` tools)
-
-- **Austrian federal, state & case law** — broad Bundesrecht and Landesrecht collection search, plus Judikatur (OGH/OLG/LG via Justiz; VwGH, VfGH, BVwG and others via the `court` filter)
-  - **Collection semantics:** `ris:search` can return consolidated norms (`BrKons`/`LrKons`) and authentic gazette publications; the returned `applikation` identifies the result type. A `bundesland` filter restricts Landesrecht to that state's consolidated law (`LrKons`). For state case law use `application="judikatur"` with the appropriate `court` (e.g. `Lvwg`), not `bundesland`.
-- **Normalized application client** — `RisDataClient.search()` restricts legislation results to consolidated law and supports all 9 Bundesländer through normalized jurisdictions
-- **No authentication** — free public Open Government Data REST API (`data.bka.gv.at/ris/api/v2.6`)
-- **Latest-first** — `sort="date"` for the newest decisions; Judikatur Rechtssätze link their full decision text (Entscheidungstext) for `ris:get`
-- **Navigate & read statutes** — `ris:toc law="ABGB"` lists the §§ with headings; `ris:get_norm law="ABGB" paragraph="1295"` returns a single §
-- **Surgical retrieval** — `ris:get section=…` returns only a Randnummer (`Rn 5`), an Rn range (`Rn 5-9`), a line range (`lines:1-40`), or a heading (`Spruch`) — all token-preserving
-- **Pandoc-compatible Markdown** — Randnummern as `[Rn. 5]{.rn}` spans; document HTML converted with Cheerio + Turndown
-- **Structured metadata** — Geschäftszahl, Entscheidungsdatum, ECLI, issuing court/organ
-- **Save to file** — `save_path` parameter to avoid context pollution
-- ⚠️ **Austrian** law — for German case law use `rii:*`, for German legislation use `legis:*`
-
 ### InfoCuria — CJEU (`icu:*` tools)
 
 - **EU Court of Justice case law** — judgments, opinions, orders from CJEU and General Court
@@ -181,31 +193,13 @@ its session details behind the provider boundary.
 - **Public API key included** — works out of the box (key valid until end of May 2027, override via env var)
 - **Save to file** — `save_path` parameter to avoid context pollution
 
-### arXiv (`arxiv:*` tools)
-
-- **Preprint search** — search by keywords, author, title, abstract, or category
-- **Metadata + abstract** — default response without full text fetch (token-efficient)
-- **HTML full text** — Markdown conversion for papers from ~2024+ (LaTeXML HTML)
-- **PDF fallback** — older papers without HTML return abstract + PDF link
-- **No authentication** — free public API; the client defines no explicit request limit (upstream usage policies still apply)
-- **Save to file** — `save_path` parameter to avoid context pollution
-
-### nautos.de (`nautos:*` tools)
-
-- **DIN/EN/ISO standards** — search and retrieve technical standards from nautos.de
-- **Two-phase document retrieval** — outline (metadata + TOC) first, then sections on demand
-- **Automatic authentication** — IP-based login (auto-detected), user-based login fallback
-- **Structured TOC** — hierarchical table of contents with section IDs for navigation
-- **File cache** — 30-day TTL, persistent across restarts (`~/.local/share/german-legal-mcp/cache/nautos/`)
-- **Save to file** — `save_path` parameter to dump full document to disk
-
 ## Install in Claude Desktop (one-click bundle)
 
 The easiest way to use this server in [Claude Desktop](https://claude.ai/download) is the packaged **MCP Bundle (`.mcpb`)** — no Node.js, no `npx`, no config file.
 
 1. Download **[`german-legal-mcp.mcpb`](https://github.com/metaneutrons/german-legal-mcp/releases/latest/download/german-legal-mcp.mcpb)** from the [latest release](https://github.com/metaneutrons/german-legal-mcp/releases/latest).
 2. In Claude Desktop open **Settings → Extensions** and drag the `.mcpb` onto the window (or use **Install…**).
-3. Optionally set the DIP key or nautos credentials in the extension's settings — everything else works out of the box.
+3. Optionally set the DIP key in the extension's settings — everything else works out of the box.
 
 The bundle ships the public, no-authentication sources and is cross-platform (macOS and Windows, Apple Silicon and Intel) — Claude Desktop supplies the Node.js runtime, so a single download works everywhere.
 
@@ -335,32 +329,15 @@ or add your MCP client config (e.g., `claude_desktop_config.json`):
 | `GLMCP_HTTP_PORT` | `3000` | HTTP listen port, used when the platform sets no `PORT`. |
 | `GLMCP_LEGIS_ENABLED` | `true` | Bundes- & Landesrecht |
 | `GLMCP_RII_ENABLED` | `true` | Rechtsprechung im Internet |
-| `GLMCP_RIS_ENABLED` | `true` | RIS Austria (federal law + case law) |
 | `GLMCP_ICU_ENABLED` | `true` | InfoCuria (CJEU) |
 | `GLMCP_EUL_ENABLED` | `true` | EUR-Lex |
 | `GLMCP_DIP_ENABLED` | `true` | DIP Bundestag (auto-disabled after 2027-06-01 without own key) |
 | `GLMCP_DIP_API_KEY` | Public key | Override the bundled public API key |
-| `GLMCP_ARXIV_ENABLED` | `true` | arXiv preprint search |
-| `GLMCP_NAUTOS_ENABLED` | Auto | nautos.de. Auto-enabled with tenant key or credentials, auto-disabled without. |
 | `GLMCP_HAUS_ENABLED` | `false` | House documents. Off unless an index has been built. |
 | `GLMCP_HAUS_INDEX` | `<state dir>/haus/index.db` | Path to the house-document SQLite index. |
 | `GLMCP_HAUS_STALE_MONTHS` | `24` | Age in months beyond which a document's stated Stand is flagged for review. |
 
-
-### nautos.de Configuration
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `GLMCP_NAUTOS_TENANT_KEY` | For IP-based | Tenant key (e.g., `DWW`). Enables IP-based authentication. |
-| `GLMCP_NAUTOS_USERNAME` | For user-based | nautos.de account username |
-| `GLMCP_NAUTOS_PASSWORD` | For user-based | nautos.de account password |
-| `GLMCP_NAUTOS_TENANT_ID` | No | Tenant ID (auto-detected from login response) |
-
-**Authentication**: IP-based login is tried first (requires `GLMCP_NAUTOS_TENANT_KEY`). If it fails and credentials are set, user-based login is attempted as fallback.
-
-
 ## Tools
-
 
 ### Bundes- & Landesrecht
 
@@ -377,15 +354,6 @@ or add your MCP client config (e.g., `claude_desktop_config.json`):
 |------|-------------|
 | `rii:search` | Search for court decisions. `source` supports `BUND`, `BY`, `NW`, `NI`, `BB`, `HB`, `SN`, the jPortal state codes `BW`, `BE`, `HH`, `MV`, `RP`, `SL`, `ST`, `SH`, `TH`, `HE`, or `ALL` for a parallel cross-portal search. Note `BUND` is federal-only — state Arbeits-, Verwaltungs- and Oberlandesgerichte live in the state sources, so `ALL` is the right choice for a topic survey. With `ALL`, result slots are shared across the portals that matched and each portal's own hit total is reported. `page` pages every portal at once (BUND, HB and SN expose only their first page and say so); `collapse_duplicates` folds mass-litigation runs, naming what it folded. |
 | `rii:get_decision` | Retrieve full text by doc ID. `part`: K (Kurztext) or L (Langtext, default) for BUND; optional `save_path` is supported for every source. For NRW, use the URL returned by `rii:search`; for jPortal, use its `doc_id`. |
-
-### RIS Österreich
-
-| Tool | Description |
-|------|-------------|
-| `ris:search` | Search the broad Austrian RIS Bundesrecht/Landesrecht collections or Judikatur (`court`: Justiz/Vwgh/Vfgh/Bvwg). Legislation hits may be consolidated (`BrKons`/`LrKons`) or authentic publications; inspect the returned `applikation`. `bundesland` restricts Landesrecht to that state's consolidated law. `sort="date"` returns the latest decisions first. Judikatur hits are Rechtssätze that link their full decision text for `ris:get`. |
-| `ris:get` | Retrieve a RIS document as Markdown by `content_url` (from search) or `id` + `applikation`. `section` returns only part — `Rn 5`, `Rn 5-9`, `lines:1-40`, or a heading like `Spruch` — for token-preserving reads. Optional `save_path`. |
-| `ris:get_norm` | Retrieve a single **§** of a consolidated law — `law="ABGB" paragraph="1295"`. `application`: bundesrecht (federal) or landesrecht (+ `bundesland`). The token-preserving way to read one paragraph. |
-| `ris:toc` | Table of contents (Inhaltsverzeichnis) of a consolidated law — its §§ with headings — to navigate before `ris:get_norm`. `law="ABGB"` (full title if an abbreviation fails). `application` + `bundesland` as above. |
 
 ### InfoCuria — CJEU
 
@@ -410,20 +378,6 @@ or add your MCP client config (e.g., `claude_desktop_config.json`):
 | `dip:search_vorgang` | Search legislative processes (Vorgänge) with status and linked Drucksachen. |
 | `dip:search_plenarprotokoll` | Full text search across parliamentary debate transcripts (BT and BR). |
 
-### arXiv
-
-| Tool | Description |
-|------|-------------|
-| `arxiv:search` | Search preprints by keywords, author, title, abstract, or category. Returns metadata + abstract. |
-| `arxiv:get` | Retrieve paper by arXiv ID. Default: metadata + abstract. With `section` or `save_path`: HTML full text as Markdown (~2024+, older: PDF link). |
-
-### nautos.de
-
-| Tool | Description |
-|------|-------------|
-| `nautos:search` | Search DIN/EN/ISO standards by document number. Returns acCode, title, date, type. |
-| `nautos:get_document` | Retrieve standard by acCode. Returns outline (metadata + TOC) by default; use `section` for specific parts, `save_path` to save full document. |
-
 ### House documents (`haus:*` tools)
 
 | Tool | Description |
@@ -447,6 +401,20 @@ explicitly *nichtamtlich*. Both are indexed, both are marked, and a reading
 version always carries a pointer back to the text that governs. Confidential and personal
 material is refused at ingest rather than filtered at query time, so it is never
 written to the index at all.
+
+### TODO: authoritative retrieval
+
+`haus:` retrieves relevantly; retrieving *authoritatively* is a further step,
+and for a corpus of institutional rules the difference is where the wrong
+answers live. The open work — amendment consolidation, ranking on standing
+rather than term frequency, resolving `§ … BerlHG` citations through the
+`legis:` provider — is tracked in
+**[docs/AUTHORITATIVE-RETRIEVAL.md](docs/AUTHORITATIVE-RETRIEVAL.md)**.
+
+The largest single gap: the gazette publishes amendments as standalone
+documents, so an unconsolidated index can answer a question about a
+Geschäftsordnung with the text of a change list. Amendments are detected today
+but not yet linked to the rule they amend.
 
 ### Token-Efficient Document Retrieval
 
@@ -501,7 +469,6 @@ Live output contains only source, document identifier, title, resource type and
 content length. Full text is asserted in memory and is never written as a test
 report or CI artifact.
 
-
 ### MCP Inspector
 
 ```bash
@@ -514,7 +481,7 @@ This repo uses [Conventional Commits](https://www.conventionalcommits.org/) enfo
 
 **Types:** `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `chore`, `ci`, `build`, `revert`
 
-**Scopes:** `legis`, `rii`, `ris`, `icu`, `eul`, `dip`, `nautos`, `core`, `deps`, `config`
+**Scopes:** `legis`, `rii`, `icu`, `eul`, `dip`, `haus`, `core`, `deps`, `config`
 
 ## Architecture
 
@@ -524,11 +491,11 @@ This repo uses [Conventional Commits](https://www.conventionalcommits.org/) enfo
 - **Cheerio + Turndown** for HTML → pandoc Markdown conversion
 
 - **Zod** for input validation
-- **Axios** for HTTP requests (Legis, RII, RIS, InfoCuria, EUR-Lex, DIP, arXiv, nautos)
+- **Axios** for HTTP requests (Legis, RII, InfoCuria, EUR-Lex, DIP); **node:sqlite** (FTS5) for the local house index
 - **Structured JSON errors** — all providers return `BaseError.toJSON()` with `code`, `userMessage`, `recoveryHint`; Axios errors auto-wrapped; DNS failures fail fast
 - **Conversion validation** — all HTML→Markdown providers validate output is non-empty; detects upstream layout changes early
 
-- Tools namespaced by source (`legis:`, `rii:`, `ris:`, `icu:`, `eul:`, `dip:`, `arxiv:`, `nautos:`)
+- Tools namespaced by source (`legis:`, `rii:`, `icu:`, `eul:`, `dip:`, `haus:`)
 
 ## License
 

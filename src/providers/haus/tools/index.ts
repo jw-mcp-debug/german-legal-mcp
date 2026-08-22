@@ -7,7 +7,7 @@ const SCOPE =
   + 'documents — Handreichungen, FAQs, Merkblätter, Prozessbeschreibungen, '
   + 'published Beschlüsse, and suppliers\' published terms. It answers "how do '
   + 'we proceed here", NOT "what is the legal position": for statutes and case '
-  + 'law use the legis:, rii:, ris:, eul: and icu: tools instead.';
+  + 'law use the legis:, rii:, eul: and icu: tools instead.';
 
 export const hausTools: ToolDefinition[] = [
   {

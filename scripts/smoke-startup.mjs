@@ -84,16 +84,16 @@ console.log('✓ server booted and reported readiness');
 // --- Check 3: CLI mode --help for a real tool, no network involved
 // Asserts on formatToolHelp()'s distinguishing output shape, not just
 // substrings the global --help text also happens to contain (the tool list
-// includes "arxiv:search" and the usage block includes "OPTIONS:") — a
+// includes "legis:search" and the usage block includes "OPTIONS:") — a
 // looser check here previously stayed green while argv order made
-// `arxiv:search --help` fall through to the *global* help instead of the
+// `legis:search --help` fall through to the *global* help instead of the
 // tool's own.
-const h = await run(['arxiv:search', '--help'], { timeoutMs: 10_000 });
+const h = await run(['legis:search', '--help'], { timeoutMs: 10_000 });
 if (h.code !== 0) fail(`CLI --help exited with code ${h.code}\n${h.stderr}`);
-if (!h.stdout.startsWith('arxiv:search — ') || h.stdout.includes('TOOLS (')) {
+if (!h.stdout.startsWith('legis:search — ') || h.stdout.includes('TOOLS (')) {
   fail(`CLI --help printed unexpected output (looks like the global --help):\n${h.stdout}`);
 }
-console.log('✓ CLI mode: arxiv:search --help');
+console.log('✓ CLI mode: legis:search --help');
 
 // --- Check 4: an unknown tool name exits 1, not the MCP server
 const u = await run(['nope:nope'], { timeoutMs: 10_000 });
