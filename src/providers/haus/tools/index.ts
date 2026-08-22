@@ -74,6 +74,21 @@ export const hausTools: ToolDefinition[] = [
     }),
   },
   {
+    name: 'haus:history',
+    description:
+      'Show how a rule has changed. For a base rule, lists the amendments and '
+      + 'repeals that reference it, oldest first. For an amendment, names the rule '
+      + 'it changes. ALWAYS call this before quoting a house rule: the gazette '
+      + 'publishes amendments as separate documents and consolidates nothing, so a '
+      + 'search hit may be a change list rather than the provision, and a base rule '
+      + 'may have been amended after the version you are reading. Where the '
+      + 'referenced rule is not indexed, this says so and names it, rather than '
+      + 'implying nothing changed.',
+    inputSchema: z.object({
+      id: z.string().describe('Document id from a haus:search result'),
+    }),
+  },
+  {
     name: 'haus:stale',
     description:
       'List indexed documents whose stated Stand is older than the cut-off, or '

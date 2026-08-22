@@ -11,7 +11,25 @@ Status legend: **[ ]** open · **[~]** partially in place · **[x]** done
 
 ## 1. Consolidation — the one that produces confidently wrong answers
 
-**[ ] Link amendments to the rule they amend.**
+**[~] Link amendments to the rule they amend.**
+`haus:history` parses the relation out of the title — three amendment shapes and
+a repeal shape, all four present in the live corpus — and reports it in both
+directions. Measured on the 121 indexed documents: 35 relations, of which only
+**6 find their base rule**. The other 29 point at rules the digital gazette does
+not reach back to. `haus:coverage` now states that count, because it bounds what
+the corpus can honestly answer.
+
+Matching is exact on the normalised title, with the stated date breaking ties
+between versions. A fuzzy match was rejected: the corpus holds dozens of
+Prüfungsordnungen differing by one degree programme, and attaching an amendment
+to the wrong one would report a rule as amended when it was not.
+
+Still open: the reading versions do not link to their amendments, because the
+website titles a rule differently from the gazette ("Geschäftsordnung des
+Akademischen Senats (nichtamtliche Lesefassung)" against "… der Berliner
+Hochschule für Technik (GO-AS)"). This is the same missing correspondence as
+§ 3 below, and the same answer applies: propose the mapping, have a person
+confirm it.
 
 The gazette publishes amendments as standalone documents:
 

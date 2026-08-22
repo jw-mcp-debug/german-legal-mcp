@@ -31,11 +31,12 @@ function text(result: { content: Array<{ text: string }> }): string {
 }
 
 describe('HausProvider', () => {
-  it('exposes exactly the five haus tools', () => {
+  it('exposes exactly the six haus tools', () => {
     const names = new HausProvider(CONFIG, new HausIndexStore(':memory:'))
       .getTools().map((tool) => tool.name);
     expect(names).toEqual([
-      'haus:search', 'haus:get', 'haus:coverage', 'haus:legal_basis', 'haus:stale',
+      'haus:search', 'haus:get', 'haus:coverage', 'haus:legal_basis',
+      'haus:history', 'haus:stale',
     ]);
   });
 
@@ -155,6 +156,73 @@ describe('HausProvider', () => {
     const { provider } = seeded();
     const result = await provider.handleToolCall('haus:legal_basis', { id: 'weg' });
     expect(result.isError).toBe(true);
+    await provider.shutdown();
+  });
+
+  it('warns that an amendment is not the rule, and names what it changes', async () => {
+    const store = new HausIndexStore(':memory:');
+    const base = {
+      sourceId: 'opus4-bht', normativeForce: 'binding', confidentiality: 'public',
+      authority: 'official',
+    } as const;
+    ingestDocument(store, {
+      ...base,
+      url: 'https://example.test/go',
+      title: 'Geschäftsordnung des AS vom 05.12.2013',
+      body: 'Regeltext.',
+      asOf: '2013-12-05',
+    });
+    ingestDocument(store, {
+      ...base,
+      url: 'https://example.test/ae',
+      title: 'Vierte Änderung der Geschäftsordnung des AS vom 05.12.2013 vom 15.01.2026',
+      body: 'Änderungstext.',
+      asOf: '2026-01-15',
+    });
+    const provider = new HausProvider(CONFIG, store);
+    const byUrl = (url: string) => store.getByUrl(url)!.id;
+
+    const amendment = text(await provider.handleToolCall('haus:history',
+      { id: byUrl('https://example.test/ae') }));
+    expect(amendment).toContain('enthält nicht');
+    expect(amendment).toContain('Geschäftsordnung des AS');
+
+    const rule = text(await provider.handleToolCall('haus:history',
+      { id: byUrl('https://example.test/go') }));
+    expect(rule).toContain('1 spätere Änderung');
+    expect(rule).toContain('2026-01-15');
+    expect(rule).toContain('vor** diesen Änderungen');
+    await provider.shutdown();
+  });
+
+  it('says an absent base rule is absent instead of implying nothing changed', async () => {
+    const store = new HausIndexStore(':memory:');
+    ingestDocument(store, {
+      sourceId: 'opus4-bht',
+      url: 'https://example.test/ae2',
+      title: 'Erste Änderung der Grundordnung vom 01.01.2010 vom 15.01.2026',
+      body: 'Text.',
+      normativeForce: 'binding', confidentiality: 'public', authority: 'official',
+    });
+    const provider = new HausProvider(CONFIG, store);
+    const rendered = text(await provider.handleToolCall('haus:history',
+      { id: store.enumerate()[0]!.id }));
+    expect(rendered).toContain('liegt nicht im Index');
+    await provider.shutdown();
+  });
+
+  it('counts the amendments whose base rule the index lacks', async () => {
+    const store = new HausIndexStore(':memory:');
+    ingestDocument(store, {
+      sourceId: 'opus4-bht',
+      url: 'https://example.test/ae3',
+      title: 'Erste Änderung der Grundordnung vom 01.01.2010 vom 15.01.2026',
+      body: 'Text.',
+      normativeForce: 'binding', confidentiality: 'public', authority: 'official',
+    });
+    const provider = new HausProvider(CONFIG, store);
+    const rendered = text(await provider.handleToolCall('haus:coverage', {}));
+    expect(rendered).toContain('davon 1 ohne Stammvorschrift im Index');
     await provider.shutdown();
   });
 

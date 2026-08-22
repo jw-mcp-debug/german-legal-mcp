@@ -12,6 +12,8 @@ import { renderBanner, SCOPE_CAVEAT } from './format.js';
 import type { HausConfig } from './config.js';
 import type { NormativeForce } from '../../contracts/legal-resource.js';
 import { abbreviationOf, extractCitations, groupCitations } from './citations.js';
+import { matchParent, normalizeTitle, parseRuleRelation } from './relations.js';
+import type { RuleCandidate } from './relations.js';
 
 const logger = rootLogger.child({ module: 'haus-provider' });
 
@@ -51,6 +53,7 @@ export class HausProvider implements Provider {
     if (toolName === 'haus:get') return this.handleGet(args);
     if (toolName === 'haus:coverage') return this.handleCoverage();
     if (toolName === 'haus:legal_basis') return this.handleLegalBasis(args);
+    if (toolName === 'haus:history') return this.handleHistory(args);
     if (toolName === 'haus:stale') return this.handleStale(args);
     return { content: [{ type: 'text', text: `Unknown tool: ${toolName}` }], isError: true };
   }
@@ -180,10 +183,25 @@ export class HausProvider implements Provider {
     const lines = rows.map((row) =>
       `- [${row.sourceId}] ${row.documentType} · ${row.owner}: ${row.count} Dokument(e)`
       + (row.oldestAsOf ? ` · Stand ${row.oldestAsOf} bis ${row.newestAsOf}` : ' · ohne Stand-Angabe'));
+    const candidates = this.ruleCandidates();
+    const relations = candidates
+      .map((candidate) => ({ candidate, relation: parseRuleRelation(candidate.title) }))
+      .filter((entry) => entry.relation !== null);
+    const dangling = relations.filter(({ candidate, relation }) =>
+      matchParent(relation!, candidates.filter((c) => c.id !== candidate.id)) === null);
+
+    // Stated, because it bounds what the index can honestly answer. An
+    // amendment whose base rule is absent cannot be consolidated against it,
+    // and the corpus should say so rather than let a caller assume otherwise.
+    const gap = relations.length === 0 ? [] : ['', `Änderungen und Aufhebungen: `
+      + `${relations.length}, davon ${dangling.length} ohne Stammvorschrift im Index `
+      + `— für diese lässt sich kein konsolidierter Stand bilden.`];
+
     return {
       content: [{
         type: 'text',
-        text: `Hausindex: ${store.count()} gültige Dokumente\n\n${lines.join('\n')}\n\n${SCOPE_CAVEAT}`,
+        text: `Hausindex: ${store.count()} gültige Dokumente\n\n${lines.join('\n')}`
+          + `${gap.join('\n')}\n\n${SCOPE_CAVEAT}`,
       }],
     };
   }
@@ -218,6 +236,69 @@ export class HausProvider implements Provider {
       lines.push('', `## Verweise ohne Quellenangabe (${self.length}) — beziehen sich auf dieses Dokument selbst\n`
         + self.slice(0, 15).map((c) => `- ${c.raw}`).join('\n'));
     }
+    return { content: [{ type: 'text', text: lines.join('\n') }] };
+  }
+
+  /** Every in-force document as a match candidate, id and title only. */
+  private ruleCandidates(): RuleCandidate[] {
+    return this.requireStore().enumerate(undefined, 10_000, 0).map((record) => ({
+      id: record.id,
+      title: record.title,
+      ...(record.asOf ? { asOf: record.asOf } : {}),
+    }));
+  }
+
+  private async handleHistory(args: Record<string, unknown>): Promise<ToolResult> {
+    const { id } = args as { id: string };
+    const store = this.requireStore();
+    const record = store.get(id);
+    if (!record) {
+      return { content: [{ type: 'text', text: `Nicht im Hausindex: ${id}` }], isError: true };
+    }
+
+    const candidates = this.ruleCandidates();
+    const lines = [`# Änderungsstand: ${record.title}`, ''];
+
+    const own = parseRuleRelation(record.title);
+    if (own) {
+      const verb = own.kind === 'repeals' ? 'hebt auf' : 'ändert';
+      const parent = matchParent(own, candidates.filter((c) => c.id !== id));
+      lines.push(
+        `Dieses Dokument ist selbst eine ${own.kind === 'repeals' ? 'Aufhebung' : 'Änderung'}`
+        + `${own.ordinal ? ` (Nr. ${own.ordinal})` : ''} und **enthält nicht** den Regeltext.`,
+        '',
+        parent
+          ? `Es ${verb}: **${parent.title}** — \`${parent.id}\``
+          : `Es ${verb}: **${own.parentTitle}**`
+            + `${own.parentDate ? ` vom ${own.parentDate}` : ''}`
+            + ' — diese Vorschrift liegt nicht im Index.',
+        '',
+      );
+    }
+
+    // Amendments that name this document as the rule they change.
+    const mine = normalizeTitle(record.title);
+    const changes = candidates
+      .filter((candidate) => candidate.id !== id)
+      .map((candidate) => ({ candidate, relation: parseRuleRelation(candidate.title) }))
+      .filter(({ relation }) => relation !== null && normalizeTitle(relation.parentTitle) === mine)
+      .sort((a, b) => (a.candidate.asOf ?? '').localeCompare(b.candidate.asOf ?? ''));
+
+    if (changes.length > 0) {
+      lines.push(`## ${changes.length} spätere Änderung(en)`, '');
+      for (const { candidate, relation } of changes) {
+        lines.push(`- ${candidate.asOf ?? 'ohne Datum'} · `
+          + `${relation!.kind === 'repeals' ? 'AUFHEBUNG' : 'Änderung'}`
+          + `${relation!.ordinal ? ` Nr. ${relation!.ordinal}` : ''} — \`${candidate.id}\``);
+      }
+      lines.push('', 'Der Text oben gibt den Stand **vor** diesen Änderungen wieder, '
+        + 'sofern es sich nicht um eine konsolidierte Lesefassung handelt.');
+    } else if (!own) {
+      lines.push('Keine Änderung im Index verweist auf diese Vorschrift. '
+        + 'Das heißt nicht, dass keine ergangen ist — der Index reicht nicht '
+        + 'beliebig weit zurück.');
+    }
+
     return { content: [{ type: 'text', text: lines.join('\n') }] };
   }
 
