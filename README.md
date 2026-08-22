@@ -104,6 +104,7 @@ its session details behind the provider boundary.
 | [DIP Bundestag](https://dip.bundestag.de) | ✅ Available | `dip:` | Public key included |
 | [arXiv](https://arxiv.org) | ✅ Available | `arxiv:` | None (public) |
 | [nautos.de](https://nautos.de) | ✅ Available | `nautos:` | Required (IP or credentials) |
+| House documents (local index) | 🚧 In development | `haus:` | None (local SQLite index) |
 
 ## Features
 
@@ -341,6 +342,9 @@ or add your MCP client config (e.g., `claude_desktop_config.json`):
 | `GLMCP_DIP_API_KEY` | Public key | Override the bundled public API key |
 | `GLMCP_ARXIV_ENABLED` | `true` | arXiv preprint search |
 | `GLMCP_NAUTOS_ENABLED` | Auto | nautos.de. Auto-enabled with tenant key or credentials, auto-disabled without. |
+| `GLMCP_HAUS_ENABLED` | `false` | House documents. Off unless an index has been built. |
+| `GLMCP_HAUS_INDEX` | `<state dir>/haus/index.db` | Path to the house-document SQLite index. |
+| `GLMCP_HAUS_STALE_MONTHS` | `24` | Age in months beyond which a document's stated Stand is flagged for review. |
 
 
 ### nautos.de Configuration
@@ -419,6 +423,23 @@ or add your MCP client config (e.g., `claude_desktop_config.json`):
 |------|-------------|
 | `nautos:search` | Search DIN/EN/ISO standards by document number. Returns acCode, title, date, type. |
 | `nautos:get_document` | Retrieve standard by acCode. Returns outline (metadata + TOC) by default; use `section` for specific parts, `save_path` to save full document. |
+
+### House documents (`haus:*` tools)
+
+| Tool | Description |
+|------|-------------|
+| `haus:search` | BM25 full-text search over the local index of this institution's published administrative documents. Excludes superseded and expired documents by default. |
+| `haus:get` | Retrieve one document by id or source URL, preceded by a binding-force and Stand banner. |
+| `haus:coverage` | Report what the index contains, per document type and responsible office. |
+| `haus:stale` | List valid documents whose stated Stand is older than the cut-off, or that state none. |
+
+The `haus:` provider answers *how this institution proceeds*, never *what the
+law is* — its documents are Handreichungen, FAQs, Merkblätter, Prozess­beschreibungen
+and published Beschlüsse, and every result states its binding force and Stand.
+It reads a local SQLite (FTS5) index built by a separate ingest step; nothing is
+fetched at query time and nothing leaves the machine. Confidential and personal
+material is refused at ingest rather than filtered at query time, so it is never
+written to the index at all.
 
 ### Token-Efficient Document Retrieval
 
