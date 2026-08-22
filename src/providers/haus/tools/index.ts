@@ -24,6 +24,7 @@ export const hausTools: ToolDefinition[] = [
       query: z.string().describe('Search terms, e.g. "Lizenzvertrag Kündigung" or "§ 60d UrhG"'),
       document_type: z.string().optional().describe('Restrict to one type, e.g. "Handreichung", "FAQ", "Merkblatt"'),
       owner: z.string().optional().describe('Restrict to the responsible office'),
+      source: z.string().optional().describe('Restrict to one corpus, e.g. "opus4-bht" for the official gazette (Amtliche Mitteilungen)'),
       normative_force: z.enum(['binding', 'guidance', 'record', 'draft']).optional()
         .describe('Restrict by binding force. "binding" = Beschluss/Dienstanweisung; "guidance" = Handreichung/FAQ'),
       include_outdated: z.boolean().optional().default(false)

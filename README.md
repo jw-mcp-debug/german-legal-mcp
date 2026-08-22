@@ -428,7 +428,7 @@ or add your MCP client config (e.g., `claude_desktop_config.json`):
 
 | Tool | Description |
 |------|-------------|
-| `haus:search` | BM25 full-text search over the local index of this institution's published administrative documents. Excludes superseded and expired documents by default. |
+| `haus:search` | BM25 full-text search over the local index of this institution's published administrative documents. Filter by `source`, type, office or binding force; excludes superseded and expired documents by default. |
 | `haus:get` | Retrieve one document by id or source URL, preceded by a binding-force and Stand banner. |
 | `haus:coverage` | Report what the index contains, per document type and responsible office. |
 | `haus:stale` | List valid documents whose stated Stand is older than the cut-off, or that state none. |
@@ -437,7 +437,10 @@ The `haus:` provider answers *how this institution proceeds*, never *what the
 law is* — its documents are Handreichungen, FAQs, Merkblätter, Prozess­beschreibungen
 and published Beschlüsse, and every result states its binding force and Stand.
 It reads a local SQLite (FTS5) index built by a separate ingest step; nothing is
-fetched at query time and nothing leaves the machine. Confidential and personal
+fetched at query time and nothing leaves the machine. Each record carries the
+corpus it came from — `opus4-bht` for documents promulgated in the institution's
+official gazette (Amtliche Mitteilungen) on its OPUS 4 publication server, which
+are binding house law, versus advisory material gathered from public web pages. Confidential and personal
 material is refused at ingest rather than filtered at query time, so it is never
 written to the index at all.
 

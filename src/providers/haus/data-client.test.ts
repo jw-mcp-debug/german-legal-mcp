@@ -8,6 +8,7 @@ function seed(count: number): HausIndexStore {
   const store = new HausIndexStore(':memory:');
   for (let i = 0; i < count; i++) {
     const input: HausIngestInput = {
+      sourceId: 'web',
       url: `https://example.test/doc-${i}`,
       title: `Handreichung ${i}`,
       body: 'Lizenzverträge werden vom Justiziariat geprüft.',

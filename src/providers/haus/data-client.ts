@@ -12,8 +12,6 @@ import type {
 } from '../../contracts/provider-capabilities.js';
 import type { HausDocumentRecord, HausIndexStore, HausSearchFilters } from './store.js';
 
-const SOURCE_ID = 'haus';
-
 export function toReference(record: HausDocumentRecord): AdministrativeGuidanceReference {
   return {
     resourceType: 'administrative-guidance',
@@ -23,7 +21,7 @@ export function toReference(record: HausDocumentRecord): AdministrativeGuidanceR
     confidentiality: record.confidentiality,
     provenance: {
       providerId: 'haus',
-      sourceId: SOURCE_ID,
+      sourceId: record.sourceId,
       providerDocumentId: record.id,
       canonicalUrl: record.url,
       retrievedAt: record.retrievedAt,

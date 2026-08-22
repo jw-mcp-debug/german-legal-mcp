@@ -5,6 +5,7 @@ import type { HausIngestInput } from './ingest.js';
 
 function input(overrides: Partial<HausIngestInput> = {}): HausIngestInput {
   return {
+    sourceId: 'web',
     url: 'https://example.test/merkblatt',
     title: 'Merkblatt Open Access',
     body: 'Zweitveröffentlichungen sind über das Repositorium zu melden.',

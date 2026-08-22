@@ -28,6 +28,8 @@ export const DEFAULT_RIGHTS = {
  * ends up cited as a Beschluss.
  */
 export interface HausIngestInput {
+  /** Which corpus this came from — 'opus4-bht', 'web', … */
+  readonly sourceId: string;
   readonly url: string;
   readonly title: string;
   readonly body: string;
@@ -79,6 +81,7 @@ export function ingestDocument(
 
   const record: HausDocumentRecord = {
     id,
+    sourceId: input.sourceId,
     url: input.url,
     title: input.title,
     body: input.body,

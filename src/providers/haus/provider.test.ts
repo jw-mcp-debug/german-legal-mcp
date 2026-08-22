@@ -13,6 +13,7 @@ const CONFIG: HausConfig = {
 function seeded(): { provider: HausProvider; store: HausIndexStore } {
   const store = new HausIndexStore(':memory:');
   ingestDocument(store, {
+    sourceId: 'web',
     url: 'https://example.test/handreichung',
     title: 'Handreichung Lizenzverträge',
     body: '# Prüfung\n\nLizenzverträge werden vom Justiziariat geprüft.\n\n# Fristen\n\nVier Wochen vor Vertragsschluss.',
@@ -102,7 +103,7 @@ describe('HausProvider', () => {
   it('reports coverage per type and office', async () => {
     const { provider } = seeded();
     const rendered = text(await provider.handleToolCall('haus:coverage', {}));
-    expect(rendered).toContain('Handreichung · Justiziariat: 1');
+    expect(rendered).toContain('[web] Handreichung · Justiziariat: 1');
     expect(rendered).toContain('Stand 2019-03-01');
     await provider.shutdown();
   });

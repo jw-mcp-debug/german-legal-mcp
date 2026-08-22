@@ -62,13 +62,14 @@ export class HausProvider implements Provider {
     const {
       query,
       document_type: documentType,
+      source: sourceId,
       owner,
       normative_force: normativeForce,
       include_outdated: includeOutdated = false,
       limit = 10,
       format = 'compact',
     } = args as {
-      query: string; document_type?: string; owner?: string;
+      query: string; document_type?: string; source?: string; owner?: string;
       normative_force?: NormativeForce; include_outdated?: boolean;
       limit?: number; format?: SearchFormat;
     };
@@ -92,6 +93,7 @@ export class HausProvider implements Provider {
     const rows = store.search(query, {
       limit,
       ...(documentType ? { documentType } : {}),
+      ...(sourceId ? { sourceId } : {}),
       ...(owner ? { owner } : {}),
       ...(normativeForce ? { normativeForce } : {}),
       ...(includeOutdated ? { includeOutdated } : {}),
@@ -114,6 +116,7 @@ export class HausProvider implements Provider {
     const table = renderSearchTable<HausSearchRow>({
       columns: [
         { header: 'ID', value: (row) => row.id },
+        { header: 'Quelle', value: (row) => row.sourceId },
         { header: 'Titel', value: (row) => row.title, maxWidth: 90 },
         { header: 'Typ', value: (row) => row.documentType },
         { header: 'Verbindlichkeit', value: (row) => row.normativeForce },
@@ -172,7 +175,7 @@ export class HausProvider implements Provider {
       return { content: [{ type: 'text', text: 'Der Hausindex ist leer.' }] };
     }
     const lines = rows.map((row) =>
-      `- ${row.documentType} · ${row.owner}: ${row.count} Dokument(e)`
+      `- [${row.sourceId}] ${row.documentType} · ${row.owner}: ${row.count} Dokument(e)`
       + (row.oldestAsOf ? ` · Stand ${row.oldestAsOf} bis ${row.newestAsOf}` : ' · ohne Stand-Angabe'));
     return {
       content: [{

@@ -7,6 +7,7 @@ function record(overrides: Partial<HausDocumentRecord> = {}): HausDocumentRecord
   const body = overrides.body ?? 'Für Lizenzverträge gilt die Vier-Augen-Prüfung durch das Justiziariat.';
   return {
     id: documentId(url),
+    sourceId: 'web',
     url,
     title: 'Handreichung Lizenzverträge',
     documentType: 'Handreichung',

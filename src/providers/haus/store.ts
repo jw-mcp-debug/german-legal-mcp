@@ -15,6 +15,8 @@ import type {
  */
 export interface HausDocumentRecord {
   readonly id: string;
+  /** Which corpus this came from — 'opus4-bht', 'web', … */
+  readonly sourceId: string;
   readonly url: string;
   readonly title: string;
   readonly documentType?: string;
@@ -33,6 +35,7 @@ export interface HausDocumentRecord {
 }
 
 export interface HausSearchFilters {
+  readonly sourceId?: string;
   readonly documentType?: string;
   readonly owner?: string;
   readonly normativeForce?: NormativeForce;
@@ -51,6 +54,7 @@ export interface HausSearchRow extends HausDocumentRecord {
 }
 
 export interface HausCoverageRow {
+  readonly sourceId: string;
   readonly documentType: string;
   readonly owner: string;
   readonly count: number;
@@ -93,6 +97,7 @@ function toMatchExpression(query: string): string {
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS documents (
   id             TEXT PRIMARY KEY,
+  source_id      TEXT NOT NULL DEFAULT 'web',
   url            TEXT NOT NULL UNIQUE,
   title          TEXT NOT NULL,
   document_type  TEXT,
@@ -110,6 +115,7 @@ CREATE TABLE IF NOT EXISTS documents (
   body           TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS documents_status ON documents(status);
+CREATE INDEX IF NOT EXISTS documents_source ON documents(source_id);
 CREATE INDEX IF NOT EXISTS documents_retrieved ON documents(retrieved_at);
 
 -- unicode61 folds the umlauts a German corpus is full of; there is no German
@@ -140,20 +146,37 @@ export class HausIndexStore {
     this.db = new DatabaseSync(path);
     this.db.exec('PRAGMA journal_mode = WAL');
     this.db.exec(SCHEMA);
+    this.migrate();
   }
 
   close(): void {
     this.db.close();
   }
 
+  /**
+   * `CREATE TABLE IF NOT EXISTS` is a no-op against an index built by an
+   * earlier version, so a column added later never appears and every read of
+   * it fails at runtime. Adding it here keeps an existing local index usable
+   * instead of requiring a re-crawl.
+   */
+  private migrate(): void {
+    const columns = this.db.prepare('PRAGMA table_info(documents)').all()
+      .map((row) => String(row.name));
+    if (!columns.includes('source_id')) {
+      this.db.exec(`ALTER TABLE documents ADD COLUMN source_id TEXT NOT NULL DEFAULT 'web'`);
+      this.db.exec('CREATE INDEX IF NOT EXISTS documents_source ON documents(source_id)');
+    }
+  }
+
   upsert(record: HausDocumentRecord): void {
     this.db.prepare(`
       INSERT INTO documents (
-        id, url, title, document_type, normative_force, status, confidentiality,
-        as_of, owner, superseded_by, language, licence, redistribution,
-        content_hash, retrieved_at, body
-      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        id, source_id, url, title, document_type, normative_force, status,
+        confidentiality, as_of, owner, superseded_by, language, licence,
+        redistribution, content_hash, retrieved_at, body
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       ON CONFLICT(id) DO UPDATE SET
+        source_id = excluded.source_id,
         url = excluded.url, title = excluded.title,
         document_type = excluded.document_type,
         normative_force = excluded.normative_force,
@@ -164,7 +187,7 @@ export class HausIndexStore {
         content_hash = excluded.content_hash,
         retrieved_at = excluded.retrieved_at, body = excluded.body
     `).run(
-      record.id, record.url, record.title, record.documentType ?? null,
+      record.id, record.sourceId, record.url, record.title, record.documentType ?? null,
       record.normativeForce, record.status, record.confidentiality,
       record.asOf ?? null, record.owner ?? null, record.supersededBy ?? null,
       record.language ?? null, record.licence, record.redistribution,
@@ -202,6 +225,7 @@ export class HausIndexStore {
     const conditions: string[] = ['documents_fts MATCH ?'];
     const params: (string | number)[] = [match];
     if (!filters.includeOutdated) conditions.push(`d.status = 'in-force'`);
+    if (filters.sourceId) { conditions.push('d.source_id = ?'); params.push(filters.sourceId); }
     if (filters.documentType) { conditions.push('d.document_type = ?'); params.push(filters.documentType); }
     if (filters.owner) { conditions.push('d.owner = ?'); params.push(filters.owner); }
     if (filters.normativeForce) { conditions.push('d.normative_force = ?'); params.push(filters.normativeForce); }
@@ -234,14 +258,16 @@ export class HausIndexStore {
   /** What the corpus actually holds — so "no hits" can be told apart from "not covered". */
   coverage(): HausCoverageRow[] {
     const rows = this.db.prepare(`
-      SELECT COALESCE(document_type, 'ohne Typ') AS document_type,
+      SELECT source_id,
+             COALESCE(document_type, 'ohne Typ') AS document_type,
              COALESCE(owner, 'ohne Zuständigkeit') AS owner,
              COUNT(*) AS n, MIN(as_of) AS oldest, MAX(as_of) AS newest
       FROM documents WHERE status = 'in-force'
-      GROUP BY document_type, owner
+      GROUP BY source_id, document_type, owner
       ORDER BY n DESC
     `).all();
     return rows.map((row) => ({
+      sourceId: String(row.source_id),
       documentType: String(row.document_type),
       owner: String(row.owner),
       count: Number(row.n),
@@ -290,6 +316,7 @@ function toRecord(row: Record<string, unknown>): HausDocumentRecord {
   const language = optional(row.language);
   return {
     id: String(row.id),
+    sourceId: String(row.source_id),
     url: String(row.url),
     title: String(row.title),
     normativeForce: String(row.normative_force) as NormativeForce,
