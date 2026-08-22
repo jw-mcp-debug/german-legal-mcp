@@ -4,6 +4,7 @@ export const LEGAL_RESOURCE_TYPES = [
   'literature',
   'parliamentary-material',
   'technical-standard',
+  'administrative-guidance',
 ] as const;
 
 export type LegalResourceType = (typeof LEGAL_RESOURCE_TYPES)[number];
@@ -115,6 +116,84 @@ export interface ParliamentaryMaterialReference extends LegalResourceReference {
   readonly issuer?: string;
 }
 
+/**
+ * How much weight a house document carries — the question a reader of an
+ * internal source asks first and a legal portal never has to answer.
+ *
+ * A statute is binding because of what it is. A Handreichung is binding,
+ * advisory or merely descriptive depending on who issued it and why, and
+ * nothing in its text or file name says which. Left unmodelled, a FAQ and a
+ * Gremienbeschluss arrive at a caller looking identical.
+ *
+ * `draft` is carried by the type but not populated in the published-sources
+ * distribution, which admits finished documents only. It exists so that adding
+ * a draft corpus later is a configuration change rather than a schema
+ * migration.
+ */
+export type NormativeForce =
+  /** Gremienbeschluss, Dienstanweisung, signed agreement — it governs. */
+  | 'binding'
+  /** Handreichung, Arbeitshilfe, FAQ, Merkblatt — it advises. */
+  | 'guidance'
+  /** Protokoll, correspondence — it documents; it does not regulate. */
+  | 'record'
+  /** Entwurf, Angebot, unnegotiated terms — not agreed, never quotable as such. */
+  | 'draft';
+
+/**
+ * Whether the document still applies.
+ *
+ * `unknown` is not a defect to be cleaned up; it is what a re-crawl reports
+ * when a source URL stops answering. A vanished page may be a move or a
+ * withdrawal, and only the responsible office can say which — so the index
+ * records the ambiguity instead of resolving it by deletion, which would erase
+ * exactly the signal an editor needs to act on.
+ */
+export type DocumentStatus =
+  | 'in-force'
+  | 'draft'
+  | 'superseded'
+  | 'expired'
+  | 'unknown';
+
+/**
+ * Who may see it — the question `LegalResourceRights` does not ask.
+ *
+ * `rights.redistribution` governs passing a text on to third parties under its
+ * licence. This governs whether the text may be surfaced at all. The two come
+ * apart routinely: a supplier's terms are publicly readable yet not ours to
+ * republish, while an internal Arbeitshilfe is ours entirely and still must not
+ * leave the house.
+ *
+ * The published-sources distribution indexes `public` only, and enforces that
+ * at ingest rather than per query — the cheaper place, and the one where a
+ * mistake is visible to a person.
+ */
+export type Confidentiality = 'public' | 'internal' | 'restricted';
+
+/**
+ * A document that explains or governs house practice, rather than stating law.
+ *
+ * The distinction matters at the point of use: these sources answer "how do we
+ * proceed here", never "what is the legal position". A consumer that renders
+ * them without `normativeForce` and `asOf` invites precisely the confusion the
+ * type exists to prevent.
+ */
+export interface AdministrativeGuidanceReference extends LegalResourceReference {
+  readonly resourceType: 'administrative-guidance';
+  readonly normativeForce: NormativeForce;
+  readonly status: DocumentStatus;
+  readonly confidentiality: Confidentiality;
+  /** "Stand", as the document states it — not when it was fetched. */
+  readonly asOf?: string;
+  /** The office that maintains it, and therefore the address for a correction. */
+  readonly owner?: string;
+  /** Identifier of the successor, where a source names one. */
+  readonly supersededBy?: string;
+  /** "Handreichung", "FAQ", "Merkblatt", "Beschluss" — as the source names it. */
+  readonly documentType?: string;
+}
+
 export interface TechnicalStandardReference extends LegalResourceReference {
   readonly resourceType: 'technical-standard';
   readonly documentNumber?: string;
@@ -132,7 +211,8 @@ export type KnownLegalResourceReference =
   | LegislationReference
   | LiteratureReference
   | ParliamentaryMaterialReference
-  | TechnicalStandardReference;
+  | TechnicalStandardReference
+  | AdministrativeGuidanceReference;
 
 export interface LegalResourceContent {
   readonly format: 'markdown' | 'html' | 'text' | 'xml';
